@@ -1,10 +1,15 @@
 "use strict";
 /* =================== YÖNLENDİRME =================== */
 let R = { v: "satis", p: {} }; let stack = []; let renderTok = 0;
-const NAV = [["satis", "Satış"], ["stok", "Stok"], ["cari", "Cari"], ["kasa", "Kasa"], ["rapor", "Rapor"], ["menu", "Menü"]];
-const TITLES = { satis: "Satış", stok: "Stok", cari: "Cariler", kasa: "Kasa & Gider", rapor: "Raporlar", menu: "Menü", doc: "", urun: "Ürün", caridetay: "Cari", belgeler: "Belgeler", sayim: "Stok sayımı", ayarlar: "Ayarlar", kullanicilar: "Kullanıcılar", kuyruk: "Bekleyen işlemler", yedek: "Yedek & dışa aktar", toplufiyat: "Toplu fiyat güncelleme", gunsonu: "Gün sonu" };
+const NAV_FULL = [["satis", "Satış"], ["stok", "Ürünler"], ["cari", "Müşteriler"], ["kasa", "Kasa"], ["menu", "Daha"]];
+const NAV_SIMPLE = [["satis", "Satış"], ["cari", "Müşteriler"], ["menu", "Daha"]];
+const ICON_FOR = { satis: "satis", stok: "stok", cari: "cari", kasa: "kasa", menu: "menu" };
+const TITLES = { satis: "Satış", stok: "Ürünler", cari: "Müşteriler", kasa: "Kasa", rapor: "Raporlar", menu: "Daha", doc: "", urun: "Ürün", caridetay: "Müşteri / Tedarikçi", belgeler: "Belgeler", sayim: "Stok sayımı", ayarlar: "Ayarlar", kullanicilar: "Kullanıcılar", kuyruk: "Bekleyen işlemler", yedek: "Yedek & dışa aktar", toplufiyat: "Toplu fiyat güncelleme", gunsonu: "Gün sonu" };
+// Basit mod: personel için zorunlu olabilir (ayar), yönetici kendi cihazında seçer
+function isSimple() { if (!isAdmin() && S().staffSimple !== false) return true; return lsGet("ss_mode", "gelismis") === "basit"; }
+function navList() { return isSimple() ? NAV_SIMPLE : NAV_FULL; }
 function go(v, p = {}, push = true) {
-  if (NAV.some(n => n[0] === v)) stack = []; else if (push) stack.push(R);
+  if (navList().some(n => n[0] === v)) stack = []; else if (push) stack.push(R);
   R = { v, p }; render(); window.scrollTo(0, 0);
 }
 function back() { if (stack.length) { R = stack.pop(); render(); } else go("satis"); }
@@ -12,8 +17,8 @@ function render() {
   if (!API.sess) return vLogin();
   if (D.role === null && !D.loadedAt) return vNoAccess();
   document.body.classList.remove("auth");
-  const top = stack.length ? (stack[0] && stack[0].v) : R.v;
-  $("#nav").innerHTML = NAV.map(([k, t]) => `<button data-v="${k}" class="${(stack.length ? stack[0].v : R.v) === k ? "act" : ""}">${ICONS[k]}<span>${t}</span></button>`).join("");
+  const cur = stack.length ? stack[0].v : R.v;
+  $("#nav").innerHTML = navList().map(([k, t]) => `<button data-v="${k}" class="${cur === k ? "act" : ""}">${ICONS[ICON_FOR[k]]}<span>${t}</span></button>`).join("");
   $$("#nav button").forEach(b => b.onclick = () => go(b.dataset.v));
   $("#backBtn").style.display = stack.length ? "" : "none";
   $("#ttl").textContent = R.v === "doc" ? DOC_LABEL[R.p.type] : (TITLES[R.v] || "");
@@ -22,6 +27,13 @@ function render() {
 }
 function refreshView() { if (R.v === "doc" || R.v === "satis") return; render(); }
 const DOC_LABEL = { satis: "Satış", satis_iade: "Satış iadesi", alis: "Alış girişi", alis_iade: "Alış iadesi" };
+function actionSheet(title, items) {
+  dialog(`<h3>${esc(title)}</h3><div class="sheet">${items.filter(Boolean).map((it, i) => `<button class="btn block ${it.bad ? "bad" : ""}" data-i="${i}" style="justify-content:flex-start">${it.icon || ""}${esc(it.t)}${it.s ? `<span class="small muted" style="margin-left:auto;font-weight:400">${esc(it.s)}</span>` : ""}</button>`).join("")}</div><div class="acts"><button class="btn" data-close>Kapat</button></div>`, (d, close) => {
+    const list = items.filter(Boolean);
+    $$("[data-i]", d).forEach(b => b.onclick = () => { close(); list[+b.dataset.i].f(); });
+  });
+}
+const invoicing = () => !!S().invoicing;
 
 /* =================== GİRİŞ =================== */
 function vLogin() {
@@ -34,7 +46,7 @@ function vLogin() {
     <label>Şifre</label><input id="lp" type="password" autocomplete="current-password">
     <button class="btn pri block" id="lb" style="margin-top:14px">Giriş yap</button>
     <button class="btn block" id="lf" style="margin-top:8px;border:0;background:none;color:var(--muted)">Şifremi unuttum</button>
-    <div class="hint" id="lh">İlk kaydolan kişi <b>yönetici</b> olur. Diğer çalışanları yönetici, Menü → Kullanıcılar'dan e-postalarıyla ekler; sonra onlar bu ekrandan kayıt olur.</div>
+    <div class="hint" id="lh">İlk kaydolan kişi <b>yönetici</b> olur. Diğer çalışanları yönetici, Daha → Kullanıcılar'dan e-postalarıyla ekler; sonra onlar bu ekrandan kayıt olur.</div>
   </div>`;
   let mode = "in";
   $$("#lm button").forEach(b => b.onclick = () => { mode = b.dataset.m; $$("#lm button").forEach(x => x.classList.toggle("on", x === b)); $("#lb").textContent = mode === "in" ? "Giriş yap" : "Kayıt ol"; $("#lp").autocomplete = mode === "in" ? "current-password" : "new-password"; });
@@ -57,12 +69,13 @@ function vLogin() {
 async function afterLogin() {
   const r = await loadAll();
   if (r === "noaccess") return vNoAccess();
-  go("satis");
+  go("satis"); maybeWizard();
 }
+function maybeWizard() { if (isAdmin() && !S().setupDone && !S().firm && !D.products.length) setTimeout(setupWizard, 300); }
 function vNoAccess() {
   document.body.classList.add("auth");
   $("#app").innerHTML = `<div class="login"><h1>Erişim bekleniyor</h1>
-    <p class="muted">${esc(API.email || "")} hesabı bu işletmeye eklenmemiş. Yöneticiden Menü → Kullanıcılar bölümüne e-postanızı eklemesini isteyin.</p>
+    <p class="muted">${esc(API.email || "")} hesabı bu işletmeye eklenmemiş. Yöneticiden Daha → Kullanıcılar bölümüne e-postanızı eklemesini isteyin.</p>
     <button class="btn pri block" id="rc">Tekrar dene</button><button class="btn block" id="lo" style="margin-top:8px">Çıkış yap</button></div>`;
   $("#rc").onclick = () => busy($("#rc"), async () => { const r = await loadAll(); if (r === "ok") go("satis"); else if (r === "noaccess") toast("Henüz eklenmemiş"); });
   $("#lo").onclick = async () => { await API.logout(); vLogin(); };
@@ -88,104 +101,167 @@ function addLine(type, p, qty = 1) {
   if (navigator.vibrate) try { navigator.vibrate(30); } catch (e) { }
   saveCarts();
 }
+/* --- hızlı ürünler: sabitlenenler + en çok satanlar --- */
+function quickProducts() {
+  const pins = (S().quick || []).map(prodById).filter(p => p && p.active !== false);
+  const cnt = {};
+  D.docs.filter(d => d.type === "satis" && d.status !== "iptal").forEach(d => d.lines.forEach(l => { if (l.product_id) cnt[l.product_id] = (cnt[l.product_id] || 0) + l.qty; }));
+  const top = Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([id]) => prodById(id)).filter(p => p && p.active !== false && !pins.includes(p));
+  let list = pins.concat(top);
+  if (list.length < 8) list = list.concat(D.products.filter(p => p.active !== false && !list.includes(p)).slice(0, 8 - list.length));
+  return list.slice(0, 16);
+}
+function quickEditDialog(after) {
+  let pins = [...(S().quick || [])];
+  dialog(`<h3>Hızlı ürünler</h3><div class="small muted">Yıldızlı ürünler satış ekranında her zaman en başta durur. Kalan yerleri en çok satanlar doldurur.</div><input id="qq" placeholder="Ürün ara" style="margin-top:8px"><div class="list" id="ql" style="max-height:50vh;overflow:auto"></div><div class="acts"><button class="btn" data-close>Vazgeç</button><button class="btn pri" id="ok">Kaydet</button></div>`, (d, close) => {
+    const draw = () => { const f = fold(d.querySelector("#qq").value); const l = D.products.filter(p => p.active !== false && (!f || fold(p.name + " " + (p.barcode || "")).includes(f))).sort((a, b) => (pins.includes(b.id) - pins.includes(a.id)) || a.name.localeCompare(b.name, "tr")).slice(0, 80);
+      d.querySelector("#ql").innerHTML = l.map(p => `<div class="it click" data-s="${p.id}"><span class="star ${pins.includes(p.id) ? "on" : ""}">★</span><div class="grow t">${esc(p.name)}</div><span class="muted small num">${tl(p.retail)}</span></div>`).join("") || '<div class="empty">Ürün yok</div>';
+      $$("[data-s]", d).forEach(el => el.onclick = () => { const id = el.dataset.s; pins = pins.includes(id) ? pins.filter(x => x !== id) : pins.concat(id).slice(-16); draw(); }); };
+    d.querySelector("#qq").oninput = draw; draw();
+    d.querySelector("#ok").onclick = () => busy(d.querySelector("#ok"), async () => { await saveShared({ quick: pins }); close(); if (after) after(); });
+  });
+}
+async function saveShared(patch) { D.settings = { ...S(), ...patch }; saveCache(); await writeNowOrQueue({ kind: "upsert", table: "settings", rows: [{ id: 1, data: D.settings }], label: "Ayarlar" }); }
+/* --- bugünün özeti --- */
+function todayStats() {
+  const t0 = startOfDay(new Date());
+  const docs = D.docs.filter(d => new Date(d.date) >= t0 && d.status !== "iptal");
+  const sales = r2(sum(docs.filter(d => d.type === "satis"), d => d.total) - sum(docs.filter(d => d.type === "satis_iade"), d => d.total));
+  const n = docs.filter(d => d.type === "satis").length;
+  const kasa = sum(D.accounts.filter(a => a.type === "kasa" && a.active !== false), a => D.abal[a.id] || 0);
+  const rec = sum(D.parties, c => Math.max(0, balance(c.id)));
+  const low = D.products.filter(p => p.active !== false && p.stock <= (p.min_stock || 0)).length;
+  return { sales, n, kasa, rec, low };
+}
+function todayStrip() {
+  if (!isAdmin() || isSimple()) return "";
+  const s = todayStats();
+  return `<div class="today" id="today"><div><span class="k">Bugün</span><b class="num">${tl(s.sales)}</b><span class="k">${s.n} satış</span></div><div><span class="k">Kasa</span><b class="num">${tl(s.kasa)}</b></div><div><span class="k">Veresiye</span><b class="num">${tl(s.rec)}</b></div>${s.low ? `<div><span class="k">Azalan</span><b class="warnc">${s.low}</b></div>` : ""}</div>`;
+}
+
+/* --- belge / satış ekranı (sade) --- */
 function vDoc(p) {
   const type = p.type || "satis"; const c = cartOf(type); const t = cartTotals(c); const party = partyById(c.partyId);
-  const buy = isBuy(type); const inv = c.docKind === "fatura" && !buy;
+  const buy = isBuy(type); const inv = invoicing() && !buy && c.docKind === "fatura";
   const kindNow = inv ? (party && party.efatura ? "efatura" : "earsiv") : "fis";
   const hadQ = $("#q") && $("#q").dataset.type === type ? $("#q").value : "";
-  const typeTabs = R.v === "satis" ? "" : "";
-  $("#app").innerHTML = `${typeTabs}
+  const showGrid = type === "satis" && !hadQ;
+  const qp = showGrid ? quickProducts() : [];
+  const otherOpen = c.otherOpen;
+  const payBtns = buy || type === "satis_iade" ? [["nakit", "Nakit"], ["kart", "Kart"], ["veresiye", "Hesaba"]] : [["nakit", "Nakit"], ["kart", "Kart"], ["veresiye", "Veresiye"]];
+  $("#app").innerHTML = `
+  ${type === "satis" ? todayStrip() : ""}
   <div class="pos">
    <div>
     ${type !== "satis" ? `<div class="banner ${buy ? "b-buy" : "b-ret"}">${DOC_LABEL[type]}${c.refDoc ? " · " + esc(c.refDoc) + " referanslı" : ""}</div>` : ""}
-    <div class="card">
-      <div class="row">
-        <div class="searchbox grow"><input id="q" data-type="${type}" placeholder="Barkod okut ya da ürün adı yaz…" autocomplete="off" enterkeyhint="search" value="${esc(hadQ)}"><div class="results" id="res" style="display:none"></div></div>
-        <button class="btn iconbtn" id="camBtn" title="Kamera ile barkod oku">${ICONS.cam}</button>
-      </div>
-      ${!buy ? `<div class="seg" style="margin-top:10px" id="modeSeg"><button data-m="perakende" class="${c.mode === "perakende" ? "on" : ""}">Perakende fiyat</button><button data-m="toptan" class="${c.mode === "toptan" ? "on" : ""}">Toptan fiyat</button></div>` : ""}
+    <div class="row" style="margin-bottom:10px">
+      <div class="searchbox grow"><input id="q" data-type="${type}" class="bigin" placeholder="Barkod okut ya da ürün ara…" autocomplete="off" enterkeyhint="search" value="${esc(hadQ)}"><div class="results" id="res" style="display:none"></div></div>
+      <button class="btn iconbtn big1" id="camBtn" title="Kamera ile barkod oku">${ICONS.cam}</button>
     </div>
-    <div class="card">
-      <div class="row"><h3 class="grow" style="margin:0">${buy ? "Ürünler" : "Sepet"} <span class="muted small">(${c.items.length} kalem · ${qf(c.items.reduce((a, i) => a + i.qty, 0))} adet)</span></h3>${c.items.length ? '<button class="btn sm bad" id="clr">Temizle</button>' : ""}</div>
+    ${showGrid ? `<div class="qgrid">${qp.map(x => { const inCart = c.items.find(i => i.pid === x.id); return `<button class="qt ${inCart ? "in" : ""}" data-qp="${x.id}"><span class="qn">${esc(x.name)}</span><span class="qp num">${tl(priceFor(x, type, c.mode))}</span>${inCart ? `<span class="qc">${qf(inCart.qty)}</span>` : ""}</button>`; }).join("")}${isAdmin() ? `<button class="qt qe" id="qEdit">★<span class="qn">Düzenle</span></button>` : ""}</div>` : ""}
+    ${c.items.length ? `<div class="card">
+      <div class="row"><h3 class="grow" style="margin:0">Sepet <span class="muted small">(${qf(c.items.reduce((a, i) => a + i.qty, 0))} ürün)</span></h3><button class="btn sm bad" id="clr">Temizle</button></div>
       <div class="list" id="cartList">
-      ${c.items.length ? c.items.map((i, ix) => { const pr = prodById(i.pid); const low = type === "satis" && pr && pr.stock - i.qty < 0; return `
+      ${c.items.map((i, ix) => { const pr = prodById(i.pid); const low = type === "satis" && pr && pr.stock - i.qty < 0; return `
         <div class="it">
-          <div class="grow">
-            <div class="t">${esc(i.name)}</div>
-            <div class="small muted num"><span data-price="${ix}" class="lnk">${tl(i.price)}</span> · KDV %${i.vat} · <b class="num" style="color:var(--ink)">${tl(i.qty * i.price)}</b>${low ? ' · <span class="danger">stok ' + qf(pr.stock) + "</span>" : ""}</div>
-          </div>
+          <div class="grow"><div class="t">${esc(i.name)}</div><div class="small muted num"><span data-price="${ix}" class="lnk">${tl(i.price)}</span> × ${qf(i.qty)} = <b style="color:var(--ink)">${tl(i.qty * i.price)}</b>${low ? ' · <span class="danger">stok ' + qf(pr.stock) + "</span>" : ""}</div></div>
           <div class="qty"><button data-dec="${ix}">−</button><input inputmode="decimal" data-q="${ix}" value="${qf(i.qty)}"><button data-inc="${ix}">+</button></div>
-        </div>`; }).join("") : `<div class="empty">${buy ? "Tedarikçiden gelen ürünleri okutun veya arayın." : "Sepet boş. Barkod okutun veya ürün adıyla arayın."}</div>`}
-      </div>
-    </div>
+        </div>`; }).join("")}
+      </div></div>` : (showGrid ? "" : `<div class="card"><div class="empty">${buy ? "Tedarikçiden gelen ürünleri okutun veya arayın." : "Ürün okutun veya arayın."}</div></div>`)}
    </div>
    <div class="side">
     <div class="card">
-      <label style="margin-top:0">${buy ? "Tedarikçi" : "Müşteri"}</label>
-      <div class="row">
-        <button class="btn grow" id="pickParty" style="justify-content:flex-start;text-align:left">${party ? esc(party.name) + (balance(party.id) ? ` <span class="tag ${balance(party.id) > 0 ? "w" : ""}">${tl(balance(party.id))}</span>` : "") : `<span class="muted">${buy ? "Tedarikçi seçin" : "Perakende müşteri (seçilmedi)"}</span>`}</button>
-        ${party ? '<button class="btn iconbtn" id="unParty">' + ICONS.x + "</button>" : ""}
-      </div>
-      ${!buy ? `<label>Belge</label><div class="seg" id="docSeg"><button data-d="fis" class="${!inv ? "on" : ""}">${type === "satis" ? "Bilgi fişi" : "İade fişi"}</button><button data-d="fatura" class="${inv ? "on" : ""}">Fatura</button></div>
-        ${inv ? `<div class="small muted" style="margin-top:6px">${kindNow === "efatura" ? "Müşteri e-Fatura mükellefi → <b>e-Fatura</b>" : "→ <b>e-Arşiv fatura</b>"}${!party ? " (alıcı: nihai tüketici)" : ""}${type === "satis_iade" ? " · iade faturası" : ""}</div>` : ""}`
-      : `<label>Tedarikçi belge no</label><input id="supDoc" value="${esc(c.supDocNo)}" placeholder="Fatura / irsaliye no">`}
-      <label>${type === "satis_iade" ? "Geri ödeme" : buy && type === "alis" ? "Ödeme" : type === "alis_iade" ? "Tahsil şekli" : "Ödeme"}</label>
-      <div class="seg" id="paySeg">${["nakit", "kart", "havale", "veresiye"].map(k => `<button data-p="${k}" class="${c.pay === k ? "on" : ""}">${k === "veresiye" ? (buy || type === "satis_iade" ? "Hesaba" : "Veresiye") : PAYN[k].replace("Kredi kartı", "Kart").replace("Havale/EFT", "Havale")}</button>`).join("")}</div>
-      ${c.pay === "veresiye" ? `<div class="grid2"><div><label>Peşin ${buy ? "ödenen" : "alınan"}</label><input id="paid" inputmode="decimal" placeholder="0,00" value="${esc(c.paid)}"></div><div><label>Vade tarihi</label><input id="due" type="date" value="${esc(c.due)}"></div></div>` : ""}
-      <div class="grid2">
-        <div><label>İskonto (₺)</label><input id="disc" inputmode="decimal" placeholder="0,00" value="${c.discount ? esc(String(c.discount)) : ""}"></div>
-        ${c.pay === "nakit" && type === "satis" ? `<div><label>Alınan para</label><input id="given" inputmode="decimal" placeholder="0,00"></div>` : `<div><label>Not</label><input id="note" value="${esc(c.note)}"></div>`}
-      </div>
-      ${buy && type === "alis" && canSeeCost() ? `<label class="chk"><input type="checkbox" id="updCost" ${c.updateCost ? "checked" : ""}> Ürünlerin alış fiyatını güncelle</label>` : ""}
-      <div id="change" class="small okc" style="margin-top:6px"></div>
-      <div class="row" style="margin-top:12px;align-items:flex-end"><div class="grow"><div class="small muted">Toplam${t.disc ? ` (ara ${tl(t.gross)} − ${tl(t.disc)})` : ""}</div><div class="total num">${tl(t.total)}</div></div></div>
-      <button class="btn pri block big" id="finish" ${c.items.length ? "" : "disabled"}>${ICONS.print} ${type === "satis" ? "Satışı tamamla" : "Kaydet"}</button>
-      ${type === "satis" ? `<div class="row" style="margin-top:8px;gap:6px"><button class="btn sm grow" id="toRet">İade al</button><button class="btn sm grow" id="toBuy">Alış girişi</button></div>` : ""}
+      <button class="btn block" id="pickParty" style="justify-content:flex-start;text-align:left">${ICONS.cari}<span class="grow">${party ? esc(party.name) : `<span class="muted">${buy ? "Tedarikçi seçin" : "Müşteri (isteğe bağlı)"}</span>`}</span>${party && balance(party.id) ? `<span class="tag ${balance(party.id) > 0 ? "w" : ""}">${tl(balance(party.id))}</span>` : ""}${party ? `<span id="unParty" class="xbtn">${ICONS.x}</span>` : ""}</button>
+      <div class="seg big" id="paySeg" style="margin-top:10px">${payBtns.map(([k, l]) => `<button data-p="${k}" class="${c.pay === k || (k === "nakit" && c.pay === "havale" && false) ? "on" : ""}">${l}</button>`).join("")}</div>
+      ${c.pay === "havale" ? `<div class="small muted" style="margin-top:4px">Ödeme: Havale/EFT</div>` : ""}
+      ${c.pay === "veresiye" ? `<div class="grid2"><div><label>Peşin ${buy ? "ödenen" : "alınan"}</label><input id="paid" inputmode="decimal" placeholder="0,00" value="${esc(c.paid)}"></div><div><label>Vade</label><input id="due" type="date" value="${esc(c.due)}"></div></div>` : ""}
+      ${inv ? `<div class="small muted" style="margin-top:6px">${kindNow === "efatura" ? "e-Fatura" : "e-Arşiv fatura"} kesilecek</div>` : ""}
+      ${buy ? `<label>Tedarikçi belge no <span class="muted">— varsa</span></label><input id="supDoc" value="${esc(c.supDocNo)}" placeholder="Fatura / irsaliye no">` : ""}
+      <details class="other" ${otherOpen ? "open" : ""} id="other"><summary>Diğer seçenekler${(c.discount || c.note || c.pay === "havale" || (!buy && c.mode === "toptan") || inv) ? " •" : ""}</summary>
+        <div class="grid2"><div><label>İskonto (₺)</label><input id="disc" inputmode="decimal" placeholder="0,00" value="${c.discount ? esc(String(c.discount)) : ""}"></div><div><label>Not</label><input id="note" value="${esc(c.note)}"></div></div>
+        ${!buy ? `<label>Fiyat</label><div class="seg" id="modeSeg"><button data-m="perakende" class="${c.mode === "perakende" ? "on" : ""}">Perakende</button><button data-m="toptan" class="${c.mode === "toptan" ? "on" : ""}">Toptan</button></div>` : ""}
+        <label class="chk"><input type="checkbox" id="havale" ${c.pay === "havale" ? "checked" : ""}> Havale / EFT ile ödendi</label>
+        ${invoicing() && !buy ? `<label class="chk"><input type="checkbox" id="fatura" ${c.docKind === "fatura" ? "checked" : ""}> Fatura kes (e-Arşiv / e-Fatura)</label>` : ""}
+        ${type === "alis" && canSeeCost() ? `<label class="chk"><input type="checkbox" id="updCost" ${c.updateCost ? "checked" : ""}> Alış fiyatlarını güncelle</label>` : ""}
+      </details>
+      <div class="row" style="margin-top:12px;align-items:flex-end"><div class="grow"><div class="small muted">Toplam${t.disc ? ` (iskonto −${tl(t.disc)})` : ""}</div><div class="total num">${tl(t.total)}</div></div></div>
+      <button class="btn pri block big" id="finish" ${c.items.length ? "" : "disabled"}>${type === "satis" ? (c.pay === "nakit" ? "Ödeme al" : "Satışı tamamla") : "Kaydet"}</button>
     </div>
    </div>
   </div>`;
+  const rerender = () => vDoc(p);
   const q = $("#q"), res = $("#res");
   const showRes = () => {
     const list = searchProducts(q.value);
     if (!q.value.trim()) { res.style.display = "none"; return; }
     res.style.display = "block";
-    res.innerHTML = list.length ? list.map(pp => `<div class="it" data-pid="${pp.id}"><div class="grow"><div class="t">${esc(pp.name)}</div><div class="small muted">${esc(pp.barcode || pp.code || "barkodsuz")} · stok <span class="${pp.stock <= 0 ? "danger" : ""}">${qf(pp.stock)}</span></div></div><b class="num">${tl(priceFor(pp, type, c.mode))}</b></div>`).join("")
+    res.innerHTML = list.length ? list.map(pp => `<div class="it" data-pid="${pp.id}"><div class="grow"><div class="t">${esc(pp.name)}</div><div class="small muted">stok <span class="${pp.stock <= 0 ? "danger" : ""}">${qf(pp.stock)}</span></div></div><b class="num">${tl(priceFor(pp, type, c.mode))}</b></div>`).join("")
       : `<div class="empty">Bulunamadı. <button class="btn sm" id="newFromQ">${ICONS.plus} Yeni ürün olarak ekle</button></div>`;
-    $$("[data-pid]", res).forEach(el => el.onclick = () => { q.value = ""; addLine(type, prodById(el.dataset.pid)); vDoc(p); });
-    const nb = $("#newFromQ"); if (nb) nb.onclick = () => { const v = q.value.trim(); const isBc = /^\d{6,14}$/.test(v); productDialog(null, { barcode: isBc ? v : "", name: isBc ? "" : v }, np => { q.value = ""; addLine(type, np); vDoc(p); }); };
+    $$("[data-pid]", res).forEach(el => el.onclick = () => { q.value = ""; addLine(type, prodById(el.dataset.pid)); rerender(); });
+    const nb = $("#newFromQ"); if (nb) nb.onclick = () => { const v = q.value.trim(); const isBc = /^\d{6,14}$/.test(v); productDialog(null, { barcode: isBc ? v : "", name: isBc ? "" : v }, np => { q.value = ""; addLine(type, np); rerender(); }); };
   };
-  q.oninput = showRes;
+  q.oninput = () => { if (!q.value.trim() && type === "satis") return rerender(); showRes(); if (type === "satis" && q.value.trim().length === 1) { const g = $(".qgrid"); if (g) g.remove(); } };
   q.onkeydown = e => {
     if (e.key !== "Enter") return; e.preventDefault();
     const v = q.value.trim(); if (!v) return;
     const byBc = D.products.find(x => x.barcode === v || x.code === v);
-    if (byBc) { q.value = ""; addLine(type, byBc); vDoc(p); return; }
-    const l = searchProducts(v); if (l.length === 1) { q.value = ""; addLine(type, l[0]); vDoc(p); return; }
-    if (/^\d{6,14}$/.test(v)) { toast("Bu barkod kayıtlı değil"); productDialog(null, { barcode: v }, np => { q.value = ""; addLine(type, np); vDoc(p); }); } else showRes();
+    if (byBc) { q.value = ""; addLine(type, byBc); rerender(); return; }
+    const l = searchProducts(v); if (l.length === 1) { q.value = ""; addLine(type, l[0]); rerender(); return; }
+    if (/^\d{6,14}$/.test(v)) { toast("Bu barkod kayıtlı değil"); productDialog(null, { barcode: v }, np => { q.value = ""; addLine(type, np); rerender(); }); } else showRes();
   };
-  if (hadQ) showRes();
-  if (window.matchMedia("(pointer:fine)").matches) q.focus();
-  $("#camBtn").onclick = () => scanDialog(code => { const pp = D.products.find(x => x.barcode === code); if (pp) { addLine(type, pp); vDoc(p); } else { toast("Kayıtsız barkod: " + code); productDialog(null, { barcode: code }, np => { addLine(type, np); vDoc(p); }); } }, true);
-  const ms = $("#modeSeg"); if (ms) $$("button", ms).forEach(b => b.onclick = () => { c.mode = b.dataset.m; c.items.forEach(i => { const pp = prodById(i.pid); if (pp) i.price = priceFor(pp, type, c.mode); }); saveCarts(); vDoc(p); });
-  const ds = $("#docSeg"); if (ds) $$("button", ds).forEach(b => b.onclick = () => { c.docKind = b.dataset.d; saveCarts(); vDoc(p); });
-  $$("#paySeg button").forEach(b => b.onclick = () => { c.pay = b.dataset.p; saveCarts(); vDoc(p); });
-  const clr = $("#clr"); if (clr) clr.onclick = async () => { if (await ask("Liste temizlensin mi?", "Temizle", true)) { carts[type] = newCart(type); saveCarts(); vDoc(p); } };
-  $$("[data-inc]").forEach(b => b.onclick = () => { c.items[b.dataset.inc].qty = r2(c.items[b.dataset.inc].qty + 1); saveCarts(); vDoc(p); });
-  $$("[data-dec]").forEach(b => b.onclick = () => { const i = c.items[b.dataset.dec]; i.qty = r2(i.qty - 1); if (i.qty <= 0) c.items.splice(b.dataset.dec, 1); saveCarts(); vDoc(p); });
-  $$("[data-q]").forEach(inp => inp.onchange = () => { const v = pnum(inp.value); if (v <= 0) c.items.splice(inp.dataset.q, 1); else c.items[inp.dataset.q].qty = v; saveCarts(); vDoc(p); });
-  $$("[data-price]").forEach(el => el.onclick = async () => { const i = c.items[el.dataset.price]; const v = await prompt2(i.name, "Birim fiyat (KDV dahil)", String(i.price).replace(".", ","), "num"); if (v !== null) { i.price = r2(pnum(v)); saveCarts(); vDoc(p); } });
-  $("#pickParty").onclick = () => pickParty(buy ? "tedarikci" : "musteri", id => { c.partyId = id; const pp = partyById(id); if (!buy && pp && pp.price_type === "toptan" && c.mode !== "toptan") { c.mode = "toptan"; c.items.forEach(i => { const x = prodById(i.pid); if (x) i.price = priceFor(x, type, "toptan"); }); } if (pp && pp.due_days && !c.due) c.due = ymd(addDays(new Date(), pp.due_days)); saveCarts(); vDoc(p); });
-  const un = $("#unParty"); if (un) un.onclick = () => { c.partyId = ""; if (c.pay === "veresiye") c.pay = "nakit"; saveCarts(); vDoc(p); };
-  $("#disc").onchange = e => { c.discount = pnum(e.target.value); saveCarts(); vDoc(p); };
+  if (hadQ) { q.focus(); showRes(); }
+  else if (window.matchMedia("(pointer:fine)").matches) q.focus();
+  $("#camBtn").onclick = () => scanDialog(code => { const pp = D.products.find(x => x.barcode === code); if (pp) { addLine(type, pp); rerender(); } else { toast("Kayıtsız barkod: " + code); productDialog(null, { barcode: code }, np => { addLine(type, np); rerender(); }); } }, true);
+  $$("[data-qp]").forEach(b => b.onclick = () => { addLine(type, prodById(b.dataset.qp)); rerender(); });
+  const qe = $("#qEdit"); if (qe) qe.onclick = () => quickEditDialog(rerender);
+  const ms = $("#modeSeg"); if (ms) $$("button", ms).forEach(b => b.onclick = () => { c.mode = b.dataset.m; c.items.forEach(i => { const pp = prodById(i.pid); if (pp) i.price = priceFor(pp, type, c.mode); }); c.otherOpen = true; saveCarts(); rerender(); });
+  $$("#paySeg button").forEach(b => b.onclick = () => { c.pay = b.dataset.p; saveCarts(); if (c.pay === "veresiye" && !c.partyId) return pickParty(buy ? "tedarikci" : "musteri", id => { c.partyId = id; applyPartyDefaults(c, type); saveCarts(); rerender(); }); rerender(); });
+  $("#other").ontoggle = e => { c.otherOpen = e.target.open; saveCarts(); };
+  const hv = $("#havale"); if (hv) hv.onchange = () => { c.pay = hv.checked ? "havale" : "nakit"; saveCarts(); rerender(); };
+  const ft = $("#fatura"); if (ft) ft.onchange = () => { c.docKind = ft.checked ? "fatura" : "fis"; saveCarts(); rerender(); };
+  const clr = $("#clr"); if (clr) clr.onclick = async () => { if (await ask("Sepet temizlensin mi?", "Temizle", true)) { carts[type] = newCart(type); saveCarts(); rerender(); } };
+  $$("[data-inc]").forEach(b => b.onclick = () => { c.items[b.dataset.inc].qty = r2(c.items[b.dataset.inc].qty + 1); saveCarts(); rerender(); });
+  $$("[data-dec]").forEach(b => b.onclick = () => { const i = c.items[b.dataset.dec]; i.qty = r2(i.qty - 1); if (i.qty <= 0) c.items.splice(b.dataset.dec, 1); saveCarts(); rerender(); });
+  $$("[data-q]").forEach(inp => inp.onchange = () => { const v = pnum(inp.value); if (v <= 0) c.items.splice(inp.dataset.q, 1); else c.items[inp.dataset.q].qty = v; saveCarts(); rerender(); });
+  $$("[data-price]").forEach(el => el.onclick = async () => { const i = c.items[el.dataset.price]; const v = await prompt2(i.name, "Birim fiyat (KDV dahil)", String(i.price).replace(".", ","), "num"); if (v !== null) { i.price = r2(pnum(v)); saveCarts(); rerender(); } });
+  $("#pickParty").onclick = e => { if (e.target.closest("#unParty")) { c.partyId = ""; if (c.pay === "veresiye") c.pay = "nakit"; c.mode = type.startsWith("satis") ? S().defaultMode : "alis"; c.items.forEach(i => { const x = prodById(i.pid); if (x) i.price = priceFor(x, type, c.mode); }); saveCarts(); return rerender(); } pickParty(buy ? "tedarikci" : "musteri", id => { c.partyId = id; applyPartyDefaults(c, type); saveCarts(); rerender(); }); };
+  $("#disc").onchange = e => { c.discount = pnum(e.target.value); saveCarts(); rerender(); };
   const pd = $("#paid"); if (pd) pd.oninput = () => { c.paid = pd.value; saveCarts(); };
   const du = $("#due"); if (du) du.onchange = () => { c.due = du.value; saveCarts(); };
   const nt = $("#note"); if (nt) nt.oninput = () => { c.note = nt.value; saveCarts(); };
   const sd = $("#supDoc"); if (sd) sd.oninput = () => { c.supDocNo = sd.value; saveCarts(); };
   const uc = $("#updCost"); if (uc) uc.onchange = () => { c.updateCost = uc.checked; saveCarts(); };
-  const gv = $("#given"); if (gv) gv.oninput = () => { const g = pnum(gv.value); $("#change").textContent = g >= t.total && g > 0 ? "Para üstü: " + tl(g - t.total) : ""; };
-  const tr = $("#toRet"); if (tr) tr.onclick = () => go("doc", { type: "satis_iade" });
-  const tb = $("#toBuy"); if (tb) tb.onclick = () => go("doc", { type: "alis" });
-  $("#finish").onclick = () => busy($("#finish"), () => finishDoc(type, p));
+  const td = $("#today"); if (td) td.onclick = () => go("gunsonu", { day: ymd(new Date()) });
+  $("#finish").onclick = () => {
+    lastGiven = null;
+    const run = () => busy($("#finish"), async () => { try { await finishDoc(type, p); } catch (e) { lastGiven = null; throw e; } });
+    if (type === "satis" && c.pay === "nakit") return cashSheet(t.total, run);
+    run();
+  };
+}
+function applyPartyDefaults(c, type) {
+  const pp = partyById(c.partyId); if (!pp || isBuy(type)) return;
+  const m = pp.price_type === "toptan" ? "toptan" : S().defaultMode;
+  if (c.mode !== m) { c.mode = m; c.items.forEach(i => { const x = prodById(i.pid); if (x) i.price = priceFor(x, type, m); }); toast(m === "toptan" ? "Toptan fiyat uygulandı" : "Perakende fiyat uygulandı"); }
+  if (pp.due_days && !c.due) c.due = ymd(addDays(new Date(), pp.due_days));
+}
+/* --- hızlı para alma --- */
+let lastGiven = null;
+function cashSheet(total, onDone) {
+  const opts = [total]; [10, 20, 50, 100, 200, 500, 1000].forEach(s => { const v = Math.ceil(total / s) * s; if (v > total && !opts.includes(v) && opts.length < 6) opts.push(v); });
+  dialog(`<div class="cash"><div class="small muted">Ödenecek</div><div class="total num" style="font-size:36px">${tl(total)}</div>
+    <div class="small muted" style="margin-top:12px">Müşterinin verdiği</div>
+    <div class="cgrid">${opts.map((v, i) => `<button class="btn ${i === 0 ? "pri" : ""}" data-v="${v}">${i === 0 ? "Tam " : ""}${tl(v)}</button>`).join("")}</div>
+    <input id="cg" inputmode="decimal" placeholder="Başka tutar" style="margin-top:8px;text-align:center;font-size:20px">
+    <div id="chg" class="change"></div>
+    <div class="acts"><button class="btn" data-close>Vazgeç</button><button class="btn pri" id="ok" style="min-height:56px;font-size:18px">Tamamla</button></div></div>`, (d, close) => {
+    let given = total;
+    const upd = () => { const ch = r2(given - total); d.querySelector("#chg").innerHTML = given > total ? `Para üstü<b class="num">${tl(ch)}</b>` : given < total && given > 0 ? `<span class="danger">Eksik: ${tl(total - given)}</span>` : ""; };
+    $$("[data-v]", d).forEach(b => b.onclick = () => { given = +b.dataset.v; $$("[data-v]", d).forEach(x => x.classList.toggle("pri", x === b)); d.querySelector("#cg").value = ""; upd(); });
+    d.querySelector("#cg").oninput = e => { given = pnum(e.target.value) || total; $$("[data-v]", d).forEach(x => x.classList.remove("pri")); upd(); };
+    upd();
+    d.querySelector("#ok").onclick = () => { if (given < total) return toast("Verilen tutar toplamdan az"); lastGiven = given > total ? { given, change: r2(given - total) } : null; close(); onDone(); };
+  });
 }
 function pickParty(kind, cb) {
   dialog(`<h3>${kind === "tedarikci" ? "Tedarikçi" : "Müşteri"} seç</h3><div class="row"><input id="cq" placeholder="Ad, telefon veya VKN ara"><button class="btn iconbtn pri" id="cnew">${ICONS.plus}</button></div>
@@ -217,12 +293,12 @@ function applyLocalDoc(doc, sign = 1) {
 async function finishDoc(type, p) {
   const c = cartOf(type); if (!c.items.length) return;
   const party = partyById(c.partyId); const buy = isBuy(type);
-  const kind = (!buy && c.docKind === "fatura") ? (party && party.efatura ? "efatura" : "earsiv") : "fis";
+  let kind = (!buy && invoicing() && c.docKind === "fatura") ? (party && party.efatura ? "efatura" : "earsiv") : "fis";
   if (buy && !party && c.pay === "veresiye") throw new Error("Hesaba yazmak için tedarikçi seçin");
   if (c.pay === "veresiye" && !party) { toast("Veresiye için müşteri seçin"); return pickParty("musteri", id => { c.partyId = id; saveCarts(); vDoc(p); }); }
   if (kind === "efatura" && !(party && party.vkn)) throw new Error("e-Fatura için müşterinin VKN/TCKN bilgisi gerekli");
-  if (kind !== "fis" && !S().vkn) throw new Error("Fatura için Menü → Ayarlar'dan firma VKN/TCKN girin");
-  if (kind !== "fis" && !online) throw new Error("Fatura kesmek için internet gerekli. Şimdilik bilgi fişi kesebilirsiniz.");
+  if (kind !== "fis" && !S().vkn) throw new Error("Fatura için Daha → Ayarlar'dan firma VKN/TCKN girin");
+  if (kind !== "fis" && !online) { if (!await ask("İnternet yok, fatura şu an kesilemez. Bilgi fişi olarak kaydedilsin mi?", "Fiş olarak kaydet")) return; kind = "fis"; }
   const t = cartTotals(c);
   if (type === "satis" && party && c.pay === "veresiye" && party.credit_limit && balance(party.id) + t.total - pnum(c.paid) > +party.credit_limit) {
     if (!await ask(`${party.name} veresiye limitini (${tl(party.credit_limit)}) aşıyor. Devam edilsin mi?`, "Devam et")) return;
@@ -243,9 +319,10 @@ async function finishDoc(type, p) {
   if (setting("autoPrint") && type === "satis") printDoc(doc);
 }
 function docDoneDialog(doc) {
-  dialog(`<h3 class="okc">${doc.pending ? "Kaydedildi (internet gelince gönderilecek)" : "Kaydedildi ✓"}</h3>
+  const lg = lastGiven; lastGiven = null;
+  dialog(`${lg ? `<div class="change"><div class="small">Para üstü</div><div class="big1 num">${tl(lg.change)}</div><div class="small muted">Alınan ${tl(lg.given)}</div></div>` : ""}<h3 class="okc">${doc.pending ? "Kaydedildi (internet gelince gönderilecek)" : "Kaydedildi ✓"}</h3>
     <div class="small muted">${docName(doc)} · ${esc(doc.no || "numara bekliyor")} · <b class="num">${tl(doc.total)}</b>${doc.credit > 0 ? ` · hesaba ${tl(doc.credit)}` : ""}</div>
-    ${doc.doc_kind !== "fis" ? `<div class="hint">Fatura “taslak” olarak oluştu. Menü → Belgeler'den XML'ini alabilir ya da entegratörünüze gönderebilirsiniz.</div>` : ""}
+    ${doc.doc_kind !== "fis" ? `<div class="hint">Fatura “taslak” olarak oluştu. Daha → Satış geçmişi'nden XML'ini alabilir ya da entegratörünüze gönderebilirsiniz.</div>` : ""}
     <div class="acts"><button class="btn" data-close>Kapat</button>${doc.party && doc.party.phone ? `<a class="btn" target="_blank" rel="noopener" href="${waLink(doc.party.phone, docWaText(doc))}">WhatsApp</a>` : ""}<button class="btn pri" id="pr">${ICONS.print} Yazdır</button></div>`, (d) => { d.querySelector("#pr").onclick = () => printDoc(doc); });
 }
 const waNum = p => { let n = String(p).replace(/\D/g, ""); if (n.startsWith("0")) n = "9" + n; else if (n.length === 10) n = "90" + n; return n; };
@@ -310,6 +387,7 @@ function genBarcode() { let s = "2" + String(Date.now()).slice(-11); let sm = 0;
 
 /* =================== STOK =================== */
 let sq = "", scat = "", sflt = "";
+function exportProducts() { download(`urunler-${ymd(new Date())}.csv`, toCSV(D.products, [["Barkod", p => p.barcode], ["Kod", p => p.code], ["Ürün", p => p.name], ["Kategori", p => p.category], ["Marka", p => p.brand], ["Birim", p => p.unit], ["Perakende", p => p.retail], ["Toptan", p => p.wholesale], ...(canSeeCost() ? [["Alış", p => p.cost]] : []), ["KDV", p => p.vat], ["Stok", p => p.stock], ["Kritik", p => p.min_stock], ["Aktif", p => p.active !== false ? "Evet" : "Hayır"]]), "text/csv;charset=utf-8"); }
 function vStok() {
   const f = fold(sq);
   let list = D.products.filter(p => (sflt === "pasif" ? p.active === false : p.active !== false) && (!scat || p.category === scat) && (!f || fold(p.name + " " + (p.barcode || "") + " " + (p.code || "") + " " + (p.brand || "")).includes(f) || p.barcode === sq.trim()));
@@ -317,45 +395,38 @@ function vStok() {
   if (sflt === "yok") list = list.filter(p => p.stock <= 0);
   list.sort((a, b) => a.name.localeCompare(b.name, "tr"));
   const act = D.products.filter(p => p.active !== false);
-  const costVal = sum(act, p => Math.max(0, p.stock) * p.cost), retVal = sum(act, p => Math.max(0, p.stock) * p.retail);
   const lowN = act.filter(p => p.stock > 0 && p.stock <= (p.min_stock || 0)).length, outN = act.filter(p => p.stock <= 0).length;
   const cats = allCategories();
   const shown = list.slice(0, 300);
   $("#app").innerHTML = `
-   <div class="stats">
-     <div class="stat"><div class="k">Aktif ürün</div><div class="v">${act.length}</div></div>
-     ${canSeeCost() ? `<div class="stat"><div class="k">Stok değeri (alış)</div><div class="v num">${tl(costVal)}</div></div>` : ""}
-     <div class="stat"><div class="k">Stok değeri (satış)</div><div class="v num">${tl(retVal)}</div></div>
-     <div class="stat clickable" data-f="az"><div class="k">Kritik / Tükenen</div><div class="v"><span class="warnc">${lowN}</span> / <span class="danger">${outN}</span></div></div>
-   </div>
-   <div class="card" style="margin-top:12px">
-    <div class="row"><input id="sq" class="grow" placeholder="Ad, barkod, kod ara" value="${esc(sq)}"><button class="btn iconbtn" id="scam">${ICONS.cam}</button><button class="btn pri iconbtn" id="sadd">${ICONS.plus}</button></div>
-    <div class="chips" style="margin-top:8px">
-      ${[["", "Tümü"], ["az", "Kritik"], ["yok", "Tükenen"], ["pasif", "Pasif"]].map(([k, t]) => `<button class="pill ${sflt === k ? "on" : ""}" data-f="${k}">${t}</button>`).join("")}
-      <span class="sep"></span>
-      <button class="pill ${!scat ? "on" : ""}" data-cat="">Tüm kategoriler</button>${cats.map(c => `<button class="pill ${scat === c ? "on" : ""}" data-cat="${esc(c)}">${esc(c)}</button>`).join("")}
-    </div>
-   </div>
-   <div class="row wrap" style="gap:6px;margin-bottom:10px">
-     <button class="btn sm" data-go="alis">Alış girişi</button><button class="btn sm" data-go="sayim">Sayım</button>
-     ${isAdmin() ? `<button class="btn sm" data-go="toplufiyat">Toplu fiyat</button>` : ""}<button class="btn sm" id="imp">İçe aktar</button><button class="btn sm" id="exp">${ICONS.dl} Excel</button>
+   <div class="row" style="margin-bottom:8px"><input id="sq" class="grow bigin" placeholder="Ürün ara (ad, barkod)" value="${esc(sq)}"><button class="btn iconbtn" id="scam">${ICONS.cam}</button><button class="btn pri iconbtn" id="sadd" title="Yeni ürün">${ICONS.plus}</button><button class="btn iconbtn" id="smore" title="Diğer işlemler">⋯</button></div>
+   <div class="chips" style="margin-bottom:10px">
+     ${[["", `Tümü (${act.length})`], ["az", `Azalan${lowN ? " " + lowN : ""}`], ["yok", `Biten${outN ? " " + outN : ""}`]].map(([k, t]) => `<button class="pill ${sflt === k ? "on" : ""} ${k && (k === "az" ? lowN : outN) ? "warn" : ""}" data-f="${k}">${t}</button>`).join("")}
+     ${cats.length ? `<select id="scat" class="pillsel"><option value="">Tüm kategoriler</option>${cats.map(c => `<option ${scat === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>` : ""}
    </div>
    <div class="card list">
     ${shown.length ? shown.map(p => `<div class="it click" data-p="${p.id}">
-      <div class="grow"><div class="t">${esc(p.name)}</div><div class="small muted">${esc(p.barcode || p.code || "barkodsuz")}${p.category ? " · " + esc(p.category) : ""}${p.brand ? " · " + esc(p.brand) : ""}</div></div>
-      <div class="right"><div class="num"><b>${tl(p.retail)}</b></div><div class="small muted num">T: ${tl(p.wholesale)}</div><span class="tag ${p.stock <= 0 ? "b" : p.stock <= (p.min_stock || 0) ? "w" : ""}">${qf(p.stock)} ${esc(p.unit || "")}</span></div>
-    </div>`).join("") : '<div class="empty">Ürün bulunamadı.</div>'}
+      <div class="grow"><div class="t">${esc(p.name)}</div><div class="small muted">${esc(p.category || p.barcode || "")}</div></div>
+      <div class="right"><div class="num"><b>${tl(p.retail)}</b></div><span class="tag ${p.stock <= 0 ? "b" : p.stock <= (p.min_stock || 0) ? "w" : ""}">${qf(p.stock)} ${esc(p.unit || "")}</span></div>
+    </div>`).join("") : `<div class="empty">${D.products.length ? "Ürün bulunamadı." : "Henüz ürün yok.<br><br>"}${D.products.length ? "" : `<button class="btn pri" id="firstAdd">${ICONS.plus} İlk ürünü ekle</button>`}</div>`}
     ${list.length > 300 ? `<div class="empty small">İlk 300 ürün gösteriliyor, aramayı daraltın.</div>` : ""}
    </div>`;
   const inp = $("#sq"); inp.oninput = debounce(() => { sq = inp.value; const pos = inp.selectionStart; vStok(); const n = $("#sq"); n.focus(); n.setSelectionRange(pos, pos); }, 250);
-  $$("[data-f]").forEach(b => b.onclick = () => { sflt = sflt === b.dataset.f && b.classList.contains("stat") ? "" : b.dataset.f; vStok(); });
-  $$("[data-cat]").forEach(b => b.onclick = () => { scat = b.dataset.cat; vStok(); });
+  $$("[data-f]").forEach(b => b.onclick = () => { sflt = b.dataset.f; vStok(); });
+  const sc = $("#scat"); if (sc) sc.onchange = () => { scat = sc.value; vStok(); };
   $$("[data-p]").forEach(el => el.onclick = () => go("urun", { id: el.dataset.p }));
   $("#sadd").onclick = () => productDialog(null);
+  const fa = $("#firstAdd"); if (fa) fa.onclick = () => productDialog(null);
   $("#scam").onclick = () => scanDialog(code => { const p = D.products.find(x => x.barcode === code); if (p) go("urun", { id: p.id }); else productDialog(null, { barcode: code }); });
-  $$("[data-go]").forEach(b => b.onclick = () => b.dataset.go === "alis" ? go("doc", { type: "alis" }) : go(b.dataset.go));
-  $("#imp").onclick = importDialog;
-  $("#exp").onclick = () => download(`urunler-${ymd(new Date())}.csv`, toCSV(D.products, [["Barkod", p => p.barcode], ["Kod", p => p.code], ["Ürün", p => p.name], ["Kategori", p => p.category], ["Marka", p => p.brand], ["Birim", p => p.unit], ["Perakende", p => p.retail], ["Toptan", p => p.wholesale], ...(canSeeCost() ? [["Alış", p => p.cost]] : []), ["KDV", p => p.vat], ["Stok", p => p.stock], ["Kritik", p => p.min_stock], ["Aktif", p => p.active !== false ? "Evet" : "Hayır"]]), "text/csv;charset=utf-8");
+  $("#smore").onclick = () => actionSheet("Ürün işlemleri", [
+    { t: "Alış girişi (mal kabul)", s: "Tedarikçiden gelen", f: () => go("doc", { type: "alis" }) },
+    { t: "Stok sayımı", s: "Okut-say", f: () => go("sayim") },
+    isAdmin() && { t: "Toplu fiyat güncelle", s: "% zam / indirim", f: () => go("toplufiyat") },
+    { t: "Excel'den ürün ekle", f: importDialog },
+    { t: "Excel'e aktar", f: exportProducts },
+    { t: sflt === "pasif" ? "Aktif ürünleri göster" : "Pasif ürünleri göster", f: () => { sflt = sflt === "pasif" ? "" : "pasif"; vStok(); } },
+    { t: "Alış iadesi", s: "Tedarikçiye iade", f: () => go("doc", { type: "alis_iade" }) }
+  ]);
 }
 function vUrun(p) {
   const pr = prodById(p.id); if (!pr) { back(); return; }
@@ -523,7 +594,7 @@ function partyDialog(c, preset = {}, after) {
       <div><label>Veresiye limiti (₺)</label><input id="f_credit_limit" inputmode="decimal" value="${esc(v("credit_limit"))}" placeholder="Limitsiz"></div>
       <div><label>Vade (gün)</label><input id="f_due_days" inputmode="numeric" value="${esc(v("due_days"))}" placeholder="Örn: 30"></div>
     </div>
-    <label class="chk"><input type="checkbox" id="f_efatura" ${x.efatura ? "checked" : ""}> e-Fatura mükellefi</label>
+    <label class="chk" ${invoicing() ? "" : 'style="display:none"'}><input type="checkbox" id="f_efatura" ${x.efatura ? "checked" : ""}> e-Fatura mükellefi</label>
     ${!isNew ? `<label class="chk"><input type="checkbox" id="f_active" ${x.active !== false ? "checked" : ""}> Aktif</label>` : ""}
     <label>Not</label><input id="f_note" value="${esc(v("note"))}">
     ${isNew ? `<label>Açılış bakiyesi (₺) <span class="muted">— varsa</span></label><div class="grid2"><input id="ob" inputmode="decimal" placeholder="0,00"><select id="obt"><option value="borc">Bize borçlu</option><option value="alacak">Biz borçluyuz</option></select></div>` : ""}
@@ -554,17 +625,22 @@ function vCariDetay(p) {
   const c = partyById(p.id); if (!c) { back(); return; } const b = balance(c.id); const tok = renderTok; const isSup = c.kind === "tedarikci";
   $("#app").innerHTML = `
    <div class="card">
-    <div class="row"><div class="grow"><h2 style="margin:0">${esc(c.name)}</h2><div class="small muted">${esc([c.phone, c.vkn && ("VKN/TCKN " + c.vkn), c.tax_office, c.city].filter(Boolean).join(" · "))}</div></div><button class="btn sm" id="ed">Düzenle</button></div>
+    <div class="row"><div class="grow"><h2 style="margin:0">${esc(c.name)}</h2><div class="small muted">${esc([c.phone, c.city].filter(Boolean).join(" · "))}</div></div><button class="btn iconbtn" id="more" title="Diğer işlemler">⋯</button></div>
     <div class="stat" style="margin:12px 0"><div class="k">Bakiye</div><div class="v num ${b > 0 ? "danger" : b < 0 ? "okc" : ""}">${tl(Math.abs(b))} <span class="small muted">${b > 0.009 ? "bize borçlu" : b < -0.009 ? "biz borçluyuz" : "hesap kapalı"}</span></div>${c.credit_limit ? `<div class="small muted">Limit: ${tl(c.credit_limit)} · kalan ${tl(c.credit_limit - b)}</div>` : ""}<div class="small" id="overdue"></div></div>
-    <div class="grid2"><button class="btn pri" data-k="tahsilat">Tahsilat al</button><button class="btn" data-k="odeme">Ödeme yap</button></div>
-    <div class="grid2" style="margin-top:8px"><button class="btn" id="sell">${isSup ? "Alış yap" : "Satış yap"}</button><button class="btn" id="dek">Borç/Alacak dekontu</button></div>
-    <div class="grid3" style="margin-top:8px"><button class="btn sm" id="eks">${ICONS.print} Ekstre</button><button class="btn sm" id="eka4">A4 ekstre</button>${c.phone ? `<a class="btn sm" target="_blank" rel="noopener" href="${waLink(c.phone, `Sayın ${c.name}, ${fd(new Date())} itibarıyla ${b >= 0 ? "borç" : "alacak"} bakiyeniz ${tl(Math.abs(b))}'dir. ${S().firm || ""}`)}">WhatsApp</a>` : "<span></span>"}</div>
+    <div class="grid2"><button class="btn pri big1" data-k="${isSup ? "odeme" : "tahsilat"}">${isSup ? "Ödeme yap" : "Tahsilat al"}</button><button class="btn big1" id="sell">${isSup ? "Alış yap" : "Satış yap"}</button></div>
    </div>
    <div class="card"><div class="row"><h3 class="grow" style="margin:0">Hesap hareketleri</h3><select id="per" style="width:auto;min-height:36px;padding:4px 8px"><option value="90">Son 3 ay</option><option value="365">Son 1 yıl</option><option value="0">Tümü</option></select></div><div class="list" id="led" style="margin-top:8px"><div class="empty">Yükleniyor…</div></div></div>`;
-  $("#ed").onclick = () => partyDialog(c, {}, () => vCariDetay(p));
   $$("[data-k]").forEach(bt => bt.onclick = () => cashDialog(bt.dataset.k, { party: c }, () => vCariDetay(p)));
-  $("#sell").onclick = () => { const t = isSup ? "alis" : "satis"; cartOf(t).partyId = c.id; saveCarts(); if (t === "satis") go("satis"); else go("doc", { type: t }); };
-  $("#dek").onclick = () => cashDialog("dekont", { party: c }, () => vCariDetay(p));
+  $("#sell").onclick = () => { const t = isSup ? "alis" : "satis"; cartOf(t).partyId = c.id; applyPartyDefaults(cartOf(t), t); saveCarts(); if (t === "satis") go("satis"); else go("doc", { type: t }); };
+  $("#more").onclick = () => actionSheet(c.name, [
+    { t: isSup ? "Tahsilat al" : "Ödeme yap (para iadesi)", f: () => cashDialog(isSup ? "tahsilat" : "odeme", { party: c }, () => vCariDetay(p)) },
+    { t: "Ekstre yazdır (fiş)", f: () => printStatement(c, rows) },
+    { t: "Ekstre A4 / PDF", f: () => printStatementA4(c, rows) },
+    c.phone && { t: "WhatsApp ile bakiye hatırlat", f: () => window.open(waLink(c.phone, `Sayın ${c.name}, ${fd(new Date())} itibarıyla ${b >= 0 ? "borç" : "alacak"} bakiyeniz ${tl(Math.abs(b))}'dir. ${S().firm || ""}`), "_blank") },
+    c.phone && { t: "Ara", s: c.phone, f: () => { location.href = "tel:" + c.phone; } },
+    !isSimple() && { t: "Borç / alacak dekontu", s: "Açılış bakiyesi, düzeltme", f: () => cashDialog("dekont", { party: c }, () => vCariDetay(p)) },
+    { t: "Bilgileri düzenle", f: () => partyDialog(c, {}, () => vCariDetay(p)) }
+  ]);
   let rows = [];
   const draw = () => {
     const per = +$("#per").value; const since = per ? addDays(new Date(), -per) : null;
@@ -579,8 +655,6 @@ function vCariDetay(p) {
     if (b > 0) { const dues = rows.filter(l => +l.debit > 0 && l.due_date && new Date(l.due_date) < startOfDay(new Date())); if (dues.length) $("#overdue").innerHTML = `<span class="danger">Vadesi geçmiş ${dues.length} kayıt var (en eski ${fd(dues[0].due_date)})</span>`; }
   };
   $("#per").onchange = draw;
-  $("#eks").onclick = () => printStatement(c, rows);
-  $("#eka4").onclick = () => printStatementA4(c, rows);
   API.getAll("ledger", `select=*&party_id=eq.${c.id}&order=date.asc,seq.asc`).then(r => { if (tok !== renderTok) return; rows = r; draw(); })
     .catch(e => { if (tok === renderTok) $("#led").innerHTML = `<div class="empty">${isNetErr(e) ? "Çevrimdışı – hareketler görüntülenemiyor" : esc(e.message)}</div>`; });
 }
@@ -650,15 +724,22 @@ function vKasa() {
   const total = sum(accs, a => D.abal[a.id] || 0);
   $("#app").innerHTML = `
    <div class="stats">${accs.map(a => `<div class="stat clickable ${kacc === a.id ? "sel" : ""}" data-a="${a.id}"><div class="k">${esc(a.name)}</div><div class="v num">${tl(D.abal[a.id] || 0)}</div></div>`).join("")}<div class="stat"><div class="k">Toplam</div><div class="v num">${tl(total)}</div></div></div>
-   <div class="grid3" style="margin:12px 0"><button class="btn pri" data-k="gider">− Gider</button><button class="btn" data-k="gelir">+ Gelir</button><button class="btn" data-k="virman">⇄ Transfer</button></div>
-   <div class="grid3" style="margin-bottom:12px"><button class="btn sm" data-k="tahsilat">Tahsilat</button><button class="btn sm" data-k="odeme">Ödeme</button><button class="btn sm" id="gs">Gün sonu</button></div>
+   <div class="grid3" style="margin:12px 0"><button class="btn pri big1" data-k="gider">− Gider</button><button class="btn big1" id="gs">Gün sonu</button><button class="btn big1" id="kmore">⋯ Diğer</button></div>
    <div class="card"><div class="row"><h3 class="grow" style="margin:0">Hareketler</h3><input type="date" id="kd" value="${kday}" style="width:auto;min-height:38px"></div><div id="ksum" class="small muted" style="margin-top:6px"></div><div class="list" id="kl"><div class="empty">Yükleniyor…</div></div></div>
-   ${isAdmin() ? `<button class="btn block sm" id="accm">Kasa/banka hesaplarını düzenle</button>` : ""}`;
+`;
   $$("[data-a]").forEach(el => el.onclick = () => { kacc = kacc === el.dataset.a ? "" : el.dataset.a; vKasa(); });
   $$("[data-k]").forEach(b => b.onclick = () => cashDialog(b.dataset.k, {}, () => { loadAll(true).then(() => vKasa()); vKasa(); }));
   $("#gs").onclick = () => go("gunsonu", { day: kday });
   $("#kd").onchange = e => { kday = e.target.value || ymd(new Date()); vKasa(); };
-  const am = $("#accm"); if (am) am.onclick = accountsDialog;
+  const kAfter = () => { loadAll(true).then(() => vKasa()); vKasa(); };
+  $("#kmore").onclick = () => actionSheet("Kasa işlemleri", [
+    { t: "+ Gelir ekle", s: "Satış dışı para girişi", f: () => cashDialog("gelir", {}, kAfter) },
+    { t: "Hesaplar arası transfer", s: "Kasadan bankaya vb.", f: () => cashDialog("virman", {}, kAfter) },
+    { t: "Müşteriden tahsilat", f: () => cashDialog("tahsilat", {}, kAfter) },
+    { t: "Tedarikçiye ödeme", f: () => cashDialog("odeme", {}, kAfter) },
+    isAdmin() && { t: "Açılış / düzeltme girişi", f: () => cashDialog("acilis", {}, kAfter) },
+    isAdmin() && { t: "Kasa/banka hesaplarını düzenle", f: accountsDialog }
+  ]);
   const from = startOfDay(kday + "T00:00:00"), to = addDays(from, 1);
   API.getAll("cash_moves", `select=*&date=gte.${from.toISOString()}&date=lt.${to.toISOString()}${kacc ? "&account_id=eq." + kacc : ""}&order=date.desc,seq.desc`).then(rows => {
     if (tok !== renderTok) return;
@@ -807,7 +888,7 @@ let bflt = "", bq = "", bdays = 7;
 function vBelgeler() {
   const tok = renderTok;
   $("#app").innerHTML = `<div class="card"><input id="bq" placeholder="Belge no veya cari ara" value="${esc(bq)}">
-    <div class="chips" style="margin-top:8px">${[["", "Tümü"], ["satis", "Satış"], ["satis_iade", "Satış iade"], ["alis", "Alış"], ["alis_iade", "Alış iade"], ["fatura", "Faturalar"], ["taslak", "Gönderilmemiş e-belge"], ["iptal", "İptal"]].map(([k, t]) => `<button class="pill ${bflt === k ? "on" : ""}" data-f="${k}">${t}</button>`).join("")}</div>
+    <div class="chips" style="margin-top:8px">${[["", "Tümü"], ["satis", "Satış"], ["satis_iade", "Satış iade"], ["alis", "Alış"], ["alis_iade", "Alış iade"], ...(invoicing() || D.docs.some(d => d.doc_kind !== "fis") ? [["fatura", "Faturalar"], ["taslak", "Gönderilmemiş e-belge"]] : []), ["iptal", "İptal"]].map(([k, t]) => `<button class="pill ${bflt === k ? "on" : ""}" data-f="${k}">${t}</button>`).join("")}</div>
     <div class="chips" style="margin-top:6px">${[[1, "Bugün"], [7, "7 gün"], [30, "30 gün"], [90, "90 gün"], [365, "1 yıl"]].map(([k, t]) => `<button class="pill ${bdays === k ? "on" : ""}" data-d="${k}">${t}</button>`).join("")}</div></div>
     <div class="card list" id="bl"><div class="empty">Yükleniyor…</div></div>`;
   $("#bq").oninput = debounce(e => { bq = $("#bq").value; draw(); }, 200);
@@ -870,7 +951,7 @@ function xmlDialog(d) {
 }
 async function sendToIntegrator(d) {
   const st = S();
-  if (!st.endpoint) { dialog(`<h3>Gönderim adresi tanımlı değil</h3><div class="hint">Menü → Ayarlar → e-Fatura bölümüne entegratörünüzün API adresini ve anahtarını girin. O zamana kadar XML'i entegratör paneline yükleyip “Gönderildi işaretle”yi kullanın.</div><div class="acts"><button class="btn" data-close>Kapat</button><button class="btn pri" id="x">XML'i göster</button></div>`, (dl, close) => { dl.querySelector("#x").onclick = () => { close(); xmlDialog(d); }; }); return false; }
+  if (!st.endpoint) { dialog(`<h3>Gönderim adresi tanımlı değil</h3><div class="hint">Daha → Ayarlar → e-Fatura bölümüne entegratörünüzün API adresini ve anahtarını girin. O zamana kadar XML'i entegratör paneline yükleyip “Gönderildi işaretle”yi kullanın.</div><div class="acts"><button class="btn" data-close>Kapat</button><button class="btn pri" id="x">XML'i göster</button></div>`, (dl, close) => { dl.querySelector("#x").onclick = () => { close(); xmlDialog(d); }; }); return false; }
   const r = await fetch(st.endpoint, { method: "POST", headers: { "Content-Type": "application/json", ...(st.token ? { Authorization: "Bearer " + st.token } : {}) }, body: JSON.stringify({ type: d.doc_kind === "earsiv" ? "EARSIV" : "EFATURA", invoiceNumber: d.no, uuid: d.ettn, receiverId: (d.party && d.party.vkn) || "11111111111", receiverEmail: (d.party && d.party.email) || "", ublXmlBase64: btoa(unescape(encodeURIComponent(buildUBL(d)))) }) });
   if (!r.ok) throw new Error("Entegratör yanıtı: HTTP " + r.status);
   await API.patch("documents", "id=eq." + d.id, { e_status: "gonderildi" }); d.e_status = "gonderildi"; saveCache(); toast("Gönderildi ✓"); return true;
@@ -878,31 +959,39 @@ async function sendToIntegrator(d) {
 
 /* =================== MENÜ & AYARLAR =================== */
 function vMenu() {
-  const item = (k, t, s, i = "") => `<div class="it click" data-m="${k}"><div class="grow"><div class="t">${i}${t}</div>${s ? `<div class="small muted">${s}</div>` : ""}</div><span class="muted">›</span></div>`;
+  const item = (k, t, s) => `<div class="it click" data-m="${k}"><div class="grow"><div class="t">${t}</div>${s ? `<div class="small muted">${s}</div>` : ""}</div><span class="muted">›</span></div>`;
+  const simple = isSimple(); const qn = Q.items.length;
   $("#app").innerHTML = `
-   <div class="card"><div class="row"><div class="grow"><b>${esc(API.email || "")}</b><div class="small muted">${isAdmin() ? "Yönetici" : "Personel"} · ${esc(S().firm || "Firma adı girilmemiş")}</div></div><button class="btn sm" id="rl">${ICONS.refresh} Yenile</button></div><div class="small muted" style="margin-top:6px">Son eşitleme: ${D.loadedAt ? fdt(D.loadedAt) : "—"}</div></div>
+   <div class="card"><div class="row"><div class="grow"><b>${esc(API.email || "")}</b><div class="small muted">${isAdmin() ? "Yönetici" : "Personel"} · ${simple ? "Basit mod" : "Gelişmiş mod"}</div></div><button class="btn sm" id="rl">${ICONS.refresh} Yenile</button></div></div>
+   ${qn ? `<div class="card list">${item("kuyruk", `<span class="warnc">${qn} işlem gönderilmeyi bekliyor</span>`, "İnternet gelince otomatik gönderilir")}</div>` : ""}
    <div class="card list">
-    ${item("belgeler", "Belgeler", "Satış, alış, iade, fatura geçmişi")}
-    ${item("alis", "Alış girişi", "Tedarikçiden mal kabul")}
-    ${item("satis_iade", "Satış iadesi", "Müşteriden iade al")}
-    ${item("alis_iade", "Alış iadesi", "Tedarikçiye iade")}
-    ${item("sayim", "Stok sayımı", "Okut-say, stokları eşitle")}
-    ${item("gunsonu", "Gün sonu raporu", "Kasa sayımı ve Z raporu")}
-    ${isAdmin() ? item("toplufiyat", "Toplu fiyat güncelleme", "Kategoriye göre % zam/indirim") : ""}
-    ${item("kuyruk", "Bekleyen işlemler", Q.items.length ? `<span class="warnc">${Q.items.length} işlem gönderilmeyi bekliyor</span>` : "Hepsi gönderildi")}
+    ${!simple && isAdmin() ? item("rapor", "Raporlar", "Kâr, en çok satanlar, müşteriler") : ""}
+    ${item("gunsonu", "Gün sonu", "Kasa sayımı ve günlük özet")}
+    ${item("belgeler", "Satış geçmişi", "Fişler, faturalar, tekrar yazdır")}
+    ${item("satis_iade", "İade al", "Müşteriden ürün iadesi")}
    </div>
+   ${!simple ? `<div class="card list">
+    ${item("alis", "Alış girişi", "Tedarikçiden mal kabul")}
+    ${item("sayim", "Stok sayımı", "Okut-say, stokları eşitle")}
+    ${item("alis_iade", "Tedarikçiye iade", "")}
+   </div>` : ""}
    <div class="card list">
-    ${item("ayarlar", "Ayarlar", "Firma, yazıcı, e-Fatura, genel")}
-    ${isAdmin() ? item("kullanicilar", "Kullanıcılar", "Personel ekle / yetki") : ""}
-    ${isAdmin() ? item("yedek", "Yedek & dışa aktar", "Tüm verileri indir") : ""}
+    ${item("ayarlar", "Ayarlar", "Görünüm, yazıcı, firma bilgileri")}
+    ${!simple && isAdmin() ? item("kullanicilar", "Kullanıcılar", "Personel ekle / yetki") : ""}
+    ${!simple && isAdmin() ? item("yedek", "Yedek & dışa aktar", "") : ""}
+    ${!simple && isAdmin() ? item("kurulum", "Kurulum sihirbazı", "Firma, yazıcı, ilk ürünler") : ""}
+    ${isAdmin() || S().staffSimple === false ? item("mod", simple ? "Gelişmiş moda geç" : "Basit moda geç", simple ? "Tüm özellikleri göster" : "Sadece satış ve tahsilat") : ""}
     ${item("cikis", "Çıkış yap", "")}
    </div>
-   <div class="small muted" style="text-align:center">Seyyar Satış v${APP_VER}</div>`;
+   <div class="small muted" style="text-align:center">Seyyar Satış v${APP_VER}${D.loadedAt ? " · son eşitleme " + fdt(D.loadedAt) : ""}</div>`;
   $("#rl").onclick = () => busy($("#rl"), async () => { await Q.flush(); const r = await loadAll(); if (r === "ok") { toast("Güncellendi"); vMenu(); } });
   $$("[data-m]").forEach(el => el.onclick = async () => {
     const m = el.dataset.m;
     if (["alis", "satis_iade", "alis_iade"].includes(m)) return go("doc", { type: m });
-    if (m === "cikis") { if (Q.items.length && !await ask(`${Q.items.length} işlem henüz gönderilmedi. Çıkış yaparsanız kaybolabilir. Yine de çıkılsın mı?`, "Çıkış yap", true)) return; if (!Q.items.length && !await ask("Çıkış yapılsın mı?", "Çıkış yap")) return; await API.logout(); lsSet("ss_cache", null); Q.items = []; Q.save(); location.reload(); return; }
+    if (m === "gunsonu") return go("gunsonu", { day: ymd(new Date()) });
+    if (m === "kurulum") return setupWizard();
+    if (m === "mod") { lsSet("ss_mode", simple ? "gelismis" : "basit"); toast(simple ? "Gelişmiş mod" : "Basit mod"); return go("menu"); }
+    if (m === "cikis") { if (qn && !await ask(`${qn} işlem henüz gönderilmedi. Çıkış yaparsanız kaybolabilir. Yine de çıkılsın mı?`, "Çıkış yap", true)) return; if (!qn && !await ask("Çıkış yapılsın mı?", "Çıkış yap")) return; await API.logout(); lsSet("ss_cache", null); Q.items = []; Q.save(); location.reload(); return; }
     go(m);
   });
 }
@@ -913,52 +1002,124 @@ function vKuyruk() {
   $$("[data-x]").forEach(b => b.onclick = async () => { if (await ask("Bu işlem silinsin mi? Sunucuya hiç gönderilmeyecek.", "Sil", true)) { Q.items.splice(b.dataset.x, 1); Q.save(); D.docs = D.docs.filter(d => !d.pending || Q.items.some(o => o.args && o.args.p_doc && o.args.p_doc.id === d.id)); saveCache(); vKuyruk(); } });
   const fl = $("#fl"); if (fl) fl.onclick = () => busy(fl, async () => { Q.items.forEach(o => o.failed = false); await Q.flush(); vKuyruk(); });
 }
+function getFont() { return lsGet("ss_font", "normal"); }
+function applyFont(f) { lsSet("ss_font", f); document.documentElement.classList.toggle("big", f === "big"); }
 function vAyarlar() {
   const s = S(); const adm = isAdmin();
   const f = (k, l, ph = "", im = "") => `<div><label>${l}</label><input data-k="${k}" value="${esc(s[k] ?? "")}" placeholder="${esc(ph)}" ${im ? `inputmode="${im}"` : ""} ${adm ? "" : "disabled"}></div>`;
   const loc = k => setting(k);
+  const canMode = adm || S().staffSimple === false;
   $("#app").innerHTML = `
-  <div class="card"><h2>Görünüm</h2><div class="seg" id="thSeg">${Object.entries(THEMES).map(([k, t]) => `<button data-th="${k}" class="${getTheme() === k ? "on" : ""}">${t}</button>`).join("")}</div><div class="small muted" style="margin-top:6px">Otomatik: telefonun ayarına göre açık/koyu.</div></div>
-  <div class="card"><h2>Yazıcı <span class="small muted">(bu cihaz)</span></h2>
-    <label>Bağlantı yöntemi</label><select data-l="printMode"><option value="bt" ${loc("printMode") === "bt" ? "selected" : ""}>Bluetooth (doğrudan, Android Chrome)</option><option value="rawbt" ${loc("printMode") === "rawbt" ? "selected" : ""}>RawBT uygulaması (Android)</option><option value="system" ${loc("printMode") === "system" ? "selected" : ""}>Sistem yazdırma (iPhone/iPad, Wi-Fi yazıcı, PDF)</option></select>
+  <div class="card"><h2>Görünüm</h2>
+    <label style="margin-top:0">Tema</label><div class="seg" id="thSeg">${Object.entries(THEMES).map(([k, t]) => `<button data-th="${k}" class="${getTheme() === k ? "on" : ""}">${t}</button>`).join("")}</div>
+    <label>Yazı boyutu</label><div class="seg" id="fsSeg"><button data-fs="normal" class="${getFont() === "normal" ? "on" : ""}">Normal</button><button data-fs="big" class="${getFont() === "big" ? "on" : ""}">Büyük</button></div>
+    ${canMode ? `<label>Kullanım</label><div class="seg" id="mdSeg"><button data-md="basit" class="${isSimple() ? "on" : ""}">Basit</button><button data-md="gelismis" class="${!isSimple() ? "on" : ""}">Gelişmiş</button></div><div class="small muted" style="margin-top:4px">Basit modda yalnızca satış, müşteriler ve gün sonu görünür.</div>` : ""}
+  </div>
+  <div class="card"><h2>Yazıcı</h2>
     <div class="grid2">
-      <div><label>Kağıt genişliği</label><select data-l="paper"><option value="58" ${String(loc("paper")) === "58" ? "selected" : ""}>58 mm</option><option value="80" ${String(loc("paper")) === "80" ? "selected" : ""}>80 mm</option></select></div>
-      <div><label>Türkçe karakter</label><select data-l="charset"><option value="cp857" ${loc("charset") === "cp857" ? "selected" : ""}>CP857</option><option value="ascii" ${loc("charset") === "ascii" ? "selected" : ""}>Dönüştür (ş→s…)</option></select></div>
-      <div><label>Kod sayfası no</label><input data-l="codepage" inputmode="numeric" value="${esc(loc("codepage"))}"></div>
-      <div><label>Kopya sayısı</label><input data-l="copies" inputmode="numeric" value="${esc(loc("copies"))}"></div>
+      <div><label style="margin-top:0">Bağlantı</label><select data-l="printMode"><option value="bt" ${loc("printMode") === "bt" ? "selected" : ""}>Bluetooth</option><option value="rawbt" ${loc("printMode") === "rawbt" ? "selected" : ""}>RawBT uygulaması</option><option value="system" ${loc("printMode") === "system" ? "selected" : ""}>Sistem / PDF</option></select></div>
+      <div><label style="margin-top:0">Kağıt</label><select data-l="paper"><option value="58" ${String(loc("paper")) === "58" ? "selected" : ""}>58 mm</option><option value="80" ${String(loc("paper")) === "80" ? "selected" : ""}>80 mm</option></select></div>
     </div>
+    <div class="grid2" style="margin-top:10px"><button class="btn pri" id="btc">${bt.ch ? "✓ " + esc(bt.dev.name || "Bağlı") : "Yazıcı bağla"}</button><button class="btn" id="tp">Test çıktısı</button></div>
     <label class="chk"><input type="checkbox" data-l="autoPrint" ${loc("autoPrint") ? "checked" : ""}> Satış bitince otomatik yazdır</label>
-    <div class="grid2" style="margin-top:10px"><button class="btn pri" id="btc">Bluetooth yazıcı bağla</button><button class="btn" id="tp">Test çıktısı</button></div>
-    <div class="hint">Türkçe harfler bozuk çıkarsa kod sayfası numarasını deneyin (çoğu yazıcıda 13, bazılarında 61 veya 29) ya da “Dönüştür”ü seçin.</div>
+    <details class="other"><summary>Gelişmiş yazıcı ayarları</summary>
+      <div class="grid2">
+        <div><label>Türkçe karakter</label><select data-l="charset"><option value="cp857" ${loc("charset") === "cp857" ? "selected" : ""}>CP857</option><option value="ascii" ${loc("charset") === "ascii" ? "selected" : ""}>Dönüştür (ş→s…)</option></select></div>
+        <div><label>Kod sayfası no</label><input data-l="codepage" inputmode="numeric" value="${esc(loc("codepage"))}"></div>
+        <div><label>Kopya sayısı</label><input data-l="copies" inputmode="numeric" value="${esc(loc("copies"))}"></div>
+      </div>
+      <div class="hint">Türkçe harfler bozuk çıkarsa kod sayfasını 13, 61 veya 29 deneyin ya da “Dönüştür”ü seçin. iPhone/iPad'de “Sistem / PDF” kullanın.</div>
+    </details>
   </div>
   <div class="card"><h2>Firma bilgileri</h2>${adm ? "" : '<div class="small muted">Yalnızca yönetici değiştirebilir.</div>'}
-    <div class="grid2">${f("firm", "Firma / unvan")}${f("owner", "Yetkili ad soyad")}${f("vkn", "VKN / TCKN", "", "numeric")}${f("taxOffice", "Vergi dairesi")}${f("phone", "Telefon", "", "tel")}${f("email", "E-posta", "", "email")}${f("city", "İl")}${f("mersis", "MERSİS no")}</div>
+    <div class="grid2">${f("firm", "Firma adı")}${f("phone", "Telefon", "", "tel")}</div>
     <div><label>Adres</label><input data-k="address" value="${esc(s.address)}" ${adm ? "" : "disabled"}></div>
     <div><label>Fiş alt yazısı</label><input data-k="footer" value="${esc(s.footer)}" ${adm ? "" : "disabled"}></div>
+    <details class="other"><summary>Vergi bilgileri</summary><div class="grid2">${f("owner", "Yetkili ad soyad")}${f("vkn", "VKN / TCKN", "", "numeric")}${f("taxOffice", "Vergi dairesi")}${f("city", "İl")}${f("email", "E-posta", "", "email")}${f("mersis", "MERSİS no")}</div></details>
   </div>
-  <div class="card"><h2>e-Fatura / e-Arşiv</h2>
-    <div class="grid2">${f("serEarsiv", "e-Arşiv seri (3 harf)", "EAR")}${f("serEfatura", "e-Fatura seri (3 harf)", "EFT")}
-      <div><label>e-Fatura senaryosu</label><select data-k="efaturaProfile" ${adm ? "" : "disabled"}><option value="TICARIFATURA" ${s.efaturaProfile === "TICARIFATURA" ? "selected" : ""}>Ticari</option><option value="TEMELFATURA" ${s.efaturaProfile === "TEMELFATURA" ? "selected" : ""}>Temel</option></select></div>
+  ${adm ? `<div class="card"><h2>Fatura (e-Arşiv / e-Fatura)</h2>
+    <label class="chk" style="margin-top:0"><input type="checkbox" id="invOn" ${s.invoicing ? "checked" : ""}> Fatura kesiyorum</label>
+    <div class="small muted">Kapalıyken fatura seçenekleri hiçbir ekranda görünmez; satışlar bilgi fişi olarak kaydedilir.</div>
+    ${s.invoicing ? `<div class="grid2">${f("serEarsiv", "e-Arşiv seri (3 harf)", "EAR")}${f("serEfatura", "e-Fatura seri (3 harf)", "EFT")}
+      <div><label>e-Fatura senaryosu</label><select data-k="efaturaProfile"><option value="TICARIFATURA" ${s.efaturaProfile === "TICARIFATURA" ? "selected" : ""}>Ticari</option><option value="TEMELFATURA" ${s.efaturaProfile === "TEMELFATURA" ? "selected" : ""}>Temel</option></select></div>
       ${f("integrator", "Özel entegratör", "Uyumsoft, Logo, Paraşüt…")}</div>
-    ${f("endpoint", "Gönderim adresi (entegratör API / ara sunucu)", "https://…")}
-    <div><label>API anahtarı</label><input data-k="token" type="password" value="${esc(s.token)}" ${adm ? "" : "disabled"}></div>
-    <div class="hint">Faturalar GİB'in UBL-TR 1.2 formatında hazırlanır. Resmî olarak kesilmeleri için GİB e-Fatura/e-Arşiv sistemine kayıtlı olmanız ve bir özel entegratörle çalışmanız gerekir. Numaralar her yıl 1'den başlar ve sunucuda sırayla verilir.</div>
+    ${f("endpoint", "Gönderim adresi (entegratör API)", "https://…")}
+    <div><label>API anahtarı</label><input data-k="token" type="password" value="${esc(s.token)}"></div>
+    <div class="hint">Faturalar GİB'in UBL-TR 1.2 formatında hazırlanır. Resmî olarak kesilmeleri için GİB'e kayıtlı olmanız ve bir özel entegratörle çalışmanız gerekir.</div>` : ""}
   </div>
   <div class="card"><h2>Genel</h2>
     <div class="grid2">
-      <div><label>Varsayılan fiyat</label><select data-k="defaultMode" ${adm ? "" : "disabled"}><option value="perakende" ${s.defaultMode === "perakende" ? "selected" : ""}>Perakende</option><option value="toptan" ${s.defaultMode === "toptan" ? "selected" : ""}>Toptan</option></select></div>
-      <div><label>Stok eksiye düşebilir</label><select data-k="allowNegative" data-bool="1" ${adm ? "" : "disabled"}><option value="1" ${s.allowNegative ? "selected" : ""}>Evet</option><option value="0" ${!s.allowNegative ? "selected" : ""}>Hayır</option></select></div>
-      <div><label>Personel alış fiyatını görsün</label><select data-k="staffSeeCost" data-bool="1" ${adm ? "" : "disabled"}><option value="0" ${!s.staffSeeCost ? "selected" : ""}>Hayır</option><option value="1" ${s.staffSeeCost ? "selected" : ""}>Evet</option></select></div>
+      <div><label style="margin-top:0">Varsayılan fiyat</label><select data-k="defaultMode"><option value="perakende" ${s.defaultMode === "perakende" ? "selected" : ""}>Perakende</option><option value="toptan" ${s.defaultMode === "toptan" ? "selected" : ""}>Toptan</option></select></div>
+      <div><label style="margin-top:0">Stok eksiye düşebilir</label><select data-k="allowNegative" data-bool="1"><option value="1" ${s.allowNegative ? "selected" : ""}>Evet</option><option value="0" ${!s.allowNegative ? "selected" : ""}>Hayır</option></select></div>
+      <div><label>Personel modu</label><select data-k="staffSimple" data-bool="1"><option value="1" ${s.staffSimple !== false ? "selected" : ""}>Hep basit</option><option value="0" ${s.staffSimple === false ? "selected" : ""}>Kendisi seçsin</option></select></div>
+      <div><label>Personel alış fiyatını görsün</label><select data-k="staffSeeCost" data-bool="1"><option value="0" ${!s.staffSeeCost ? "selected" : ""}>Hayır</option><option value="1" ${s.staffSeeCost ? "selected" : ""}>Evet</option></select></div>
     </div>
-    <label>Ürün kategorileri (virgülle)</label><input data-k="categories" data-list="1" value="${esc((s.categories || []).join(", "))}" ${adm ? "" : "disabled"}>
-    <label>Gider türleri (virgülle)</label><input data-k="expenseCats" data-list="1" value="${esc((s.expenseCats || []).join(", "))}" ${adm ? "" : "disabled"}>
-  </div>`;
+    <label>Ürün kategorileri (virgülle)</label><input data-k="categories" data-list="1" value="${esc((s.categories || []).join(", "))}">
+    <label>Gider türleri (virgülle)</label><input data-k="expenseCats" data-list="1" value="${esc((s.expenseCats || []).join(", "))}">
+  </div>` : ""}`;
   $$("#thSeg button").forEach(b => b.onclick = () => { applyTheme(b.dataset.th); $$("#thSeg button").forEach(x => x.classList.toggle("on", x === b)); });
+  $$("#fsSeg button").forEach(b => b.onclick = () => { applyFont(b.dataset.fs); $$("#fsSeg button").forEach(x => x.classList.toggle("on", x === b)); });
+  $$("#mdSeg button").forEach(b => b.onclick = () => { lsSet("ss_mode", b.dataset.md); render(); });
   $$("[data-l]").forEach(el => el.onchange = () => { const k = el.dataset.l; let v = el.type === "checkbox" ? el.checked : el.value; if (["codepage", "copies"].includes(k)) v = pnum(v); setLocal(k, v); updPrnPill(); toast("Kaydedildi"); });
-  const saveShared = debounce(async () => { try { await writeNowOrQueue({ kind: "upsert", table: "settings", rows: [{ id: 1, data: D.settings }], label: "Ayarlar" }); toast("Kaydedildi"); } catch (e) { toast(e.message); } }, 400);
-  $$("[data-k]").forEach(el => el.onchange = () => { const k = el.dataset.k; let v = el.value; if (el.dataset.bool) v = v === "1"; if (el.dataset.list) v = v.split(",").map(x => x.trim()).filter(Boolean); if (k === "vkn") v = v.replace(/\D/g, ""); D.settings = { ...S(), [k]: v }; saveCache(); saveShared(); });
-  $("#btc").onclick = () => btConnect(true);
+  const saveSh = debounce(async () => { try { await saveShared({}); toast("Kaydedildi"); } catch (e) { toast(e.message); } }, 400);
+  $$("[data-k]").forEach(el => el.onchange = () => { const k = el.dataset.k; let v = el.value; if (el.dataset.bool) v = v === "1"; if (el.dataset.list) v = v.split(",").map(x => x.trim()).filter(Boolean); if (k === "vkn") v = v.replace(/\D/g, ""); D.settings = { ...S(), [k]: v }; saveCache(); saveSh(); });
+  const io = $("#invOn"); if (io) io.onchange = async () => { await saveShared({ invoicing: io.checked }).catch(e => toast(e.message)); vAyarlar(); };
+  $("#btc").onclick = () => btConnect(true).then(() => vAyarlar());
   $("#tp").onclick = () => printLines([{ t: "TEST ÇIKTISI", c: 1, b: 1, big: 1 }, "ÇçĞğİıÖöŞşÜü", lr("Sol", "Sağ", PW()), "1234567890".repeat(5).slice(0, PW()), { t: S().firm || "Seyyar Satış", c: 1 }]);
+}
+
+/* =================== KURULUM SİHİRBAZI =================== */
+function setupWizard() {
+  let step = 0; const added = [];
+  const steps = ["Firma", "Yazıcı", "Ürünler"];
+  dialog(`<div id="wz"></div>`, (d, close) => {
+    const finish = async () => { try { await saveShared({ setupDone: true }); } catch (e) { } close(); toast("Kurulum tamam. İyi satışlar!"); go("satis"); };
+    const draw = () => {
+      const head = `<div class="steps">${steps.map((s, i) => `<span class="${i === step ? "on" : i < step ? "done" : ""}">${i + 1}. ${s}</span>`).join("")}</div>`;
+      let body = "";
+      if (step === 0) body = `<h3>İşletmenizin bilgileri</h3><div class="small muted">Fişlerin üstünde görünür. Sonra Ayarlar'dan değiştirebilirsiniz.</div>
+        <label>Firma / tabela adı</label><input id="w_firm" value="${esc(S().firm)}" placeholder="Örn: Durusu Oyuncak">
+        <label>Telefon</label><input id="w_phone" inputmode="tel" value="${esc(S().phone)}">
+        <label>Fiş alt yazısı</label><input id="w_footer" value="${esc(S().footer)}">`;
+      if (step === 1) body = `<h3>Fiş yazıcısı</h3><div class="small muted">Yazıcınızı açın ve telefonun Bluetooth'unun açık olduğundan emin olun.</div>
+        <label>Yazıcı türü</label><div class="seg" id="w_pm"><button data-v="bt" class="${setting("printMode") === "bt" ? "on" : ""}">Bluetooth</button><button data-v="rawbt" class="${setting("printMode") === "rawbt" ? "on" : ""}">RawBT</button><button data-v="system" class="${setting("printMode") === "system" ? "on" : ""}">Yok / PDF</button></div>
+        <label>Kağıt genişliği</label><div class="seg" id="w_pp"><button data-v="58" class="${String(setting("paper")) === "58" ? "on" : ""}">58 mm</button><button data-v="80" class="${String(setting("paper")) === "80" ? "on" : ""}">80 mm</button></div>
+        <div class="grid2" style="margin-top:12px"><button class="btn" id="w_bt">${bt.ch ? "✓ Bağlı" : "Yazıcıyı bağla"}</button><button class="btn" id="w_tp">Test çıktısı</button></div>`;
+      if (step === 2) body = `<h3>İlk ürünleriniz</h3><div class="small muted">En çok sattığınız birkaç ürünü ekleyin. Barkodu olmayanlar için boş bırakın; satış ekranında dokunarak satarsınız.</div>
+        <label>Ürün adı</label><input id="w_n" placeholder="Örn: Pamuk şeker">
+        <div class="grid2"><div><label>Fiyat (₺)</label><input id="w_p" inputmode="decimal"></div><div><label>Stok</label><input id="w_s" inputmode="decimal" placeholder="0"></div></div>
+        <label>Barkod (varsa)</label><div class="row"><input id="w_b" inputmode="numeric"><button class="btn iconbtn" id="w_cam">${ICONS.cam}</button></div>
+        <button class="btn block" id="w_add" style="margin-top:10px">${ICONS.plus} Ekle</button>
+        <div class="list small" style="margin-top:6px">${added.map(x => `<div class="it">✓ ${esc(x.name)} <span class="grow"></span>${tl(x.retail)}</div>`).join("")}</div>
+        <div class="small muted" style="margin-top:6px">Çok ürününüz varsa sonra Ürünler → ⋯ → Excel'den ürün ekle ile toplu yükleyebilirsiniz.</div>`;
+      d.querySelector("#wz").innerHTML = head + body + `<div class="acts">${step ? '<button class="btn" id="w_back">Geri</button>' : '<button class="btn" id="w_skip">Sonra</button>'}<button class="btn pri" id="w_next">${step === 2 ? "Bitir" : "Devam"}</button></div>`;
+      const nx = d.querySelector("#w_next"), bk = d.querySelector("#w_back"), sk = d.querySelector("#w_skip");
+      if (sk) sk.onclick = async () => { try { await saveShared({ setupDone: true }); } catch (e) { } close(); };
+      if (bk) bk.onclick = () => { step--; draw(); };
+      if (step === 0) nx.onclick = () => busy(nx, async () => { await saveShared({ firm: d.querySelector("#w_firm").value.trim(), phone: d.querySelector("#w_phone").value.trim(), footer: d.querySelector("#w_footer").value.trim() }); step = 1; draw(); });
+      if (step === 1) {
+        $$("#w_pm button", d).forEach(b => b.onclick = () => { setLocal("printMode", b.dataset.v); draw(); });
+        $$("#w_pp button", d).forEach(b => b.onclick = () => { setLocal("paper", b.dataset.v); draw(); });
+        d.querySelector("#w_bt").onclick = () => (setting("printMode") === "bt" ? btConnect(true) : Promise.resolve(toast("Bluetooth seçili değil"))).then(draw);
+        d.querySelector("#w_tp").onclick = () => printLines([{ t: S().firm || "Seyyar Satış", c: 1, b: 1 }, { t: "Yazıcı hazır ✓", c: 1 }, ""]);
+        nx.onclick = () => { step = 2; draw(); };
+      }
+      if (step === 2) {
+        d.querySelector("#w_cam").onclick = () => scanDialog(code => { d.querySelector("#w_b").value = code; });
+        d.querySelector("#w_add").onclick = () => busy(d.querySelector("#w_add"), async () => {
+          const name = d.querySelector("#w_n").value.trim(), price = r2(pnum(d.querySelector("#w_p").value)), st = pnum(d.querySelector("#w_s").value), bc = d.querySelector("#w_b").value.trim() || null;
+          if (!name || !price) throw new Error("Ad ve fiyat girin");
+          if (bc && D.products.some(o => o.barcode === bc)) throw new Error("Bu barkod kayıtlı");
+          const row = { id: uuid(), barcode: bc, name, retail: price, wholesale: price, cost: 0, vat: 20, unit: "Adet", min_stock: 0, active: true };
+          await writeNowOrQueue({ kind: "upsert", table: "products", rows: [productRow(row)], label: "Ürün: " + name });
+          if (st) await rpcNowOrQueue("stock_adjust", { p: { product_id: row.id, type: "giris", qty: st, note: "Açılış stoğu" } }, "Açılış stoğu");
+          row.stock = st; D.products.push(row); added.push(row); saveCache(); draw(); setTimeout(() => d.querySelector("#w_n").focus(), 50);
+        });
+        nx.onclick = finish;
+      }
+    };
+    draw();
+  }, { modal: true });
 }
 function vKullanicilar() {
   $("#app").innerHTML = `<div class="card"><div class="small muted">Eklediğiniz kişi, uygulamayı açıp aynı e-postayla <b>Kayıt ol</b> dediğinde giriş yapabilir. Personel; satış, iade, tahsilat, stok ve cari işlemlerini yapabilir; raporları, kasa silme ve belge iptalini yapamaz.</div>
@@ -986,14 +1147,14 @@ const VIEWS = { satis: () => vDoc({ type: "satis" }), doc: vDoc, stok: vStok, ur
 
 /* =================== BAŞLAT =================== */
 (async function init() {
-  $("#backBtn").onclick = back; $("#themeBtn").onclick = cycleTheme; applyTheme(getTheme());
+  $("#backBtn").onclick = back; $("#themeBtn").onclick = cycleTheme; applyTheme(getTheme()); document.documentElement.classList.toggle("big", getFont() === "big");
   if (!API.sess) return vLogin();
   if (D.loadedAt && D.role) { render(); }
   else $("#app").innerHTML = '<div class="empty" style="margin-top:30vh"><span class="spin"></span><br>Yükleniyor…</div>';
   const r = await loadAll(!!D.loadedAt);
   if (r === "auth") { await API.logout(); return vLogin(); }
   if (r === "noaccess") return vNoAccess();
-  if (r === "ok" || D.loadedAt) { if (!$("#nav button")) render(); else refreshView(); Q.flush(); }
+  if (r === "ok" || D.loadedAt) { if (!$("#nav button")) render(); else refreshView(); Q.flush(); if (r === "ok") maybeWizard(); }
   else $("#app").innerHTML = `<div class="empty" style="margin-top:20vh">Bağlanılamadı. İnternet bağlantınızı kontrol edin.<br><br><button class="btn pri" onclick="location.reload()">Tekrar dene</button></div>`;
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && API.sess && D.role) { Q.flush(); if (!D.loadedAt || Date.now() - new Date(D.loadedAt) > 60000) loadAll(true).then(() => refreshView()); } });
 })();

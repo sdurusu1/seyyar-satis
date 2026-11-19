@@ -2,7 +2,7 @@
 /* =================== AYAR =================== */
 const SUPA_URL = "https://kzwmlhncpxylqvveohsb.supabase.co";
 const SUPA_KEY = "sb_publishable_mTWX0XH4IS7hbr4ZhUA0xg_rQez37iM";
-const APP_VER = "2.1";
+const APP_VER = "2.2";
 /* =================== TEMA =================== */
 const THEMES = { auto: "Otomatik", light: "Açık", dark: "Koyu" };
 const THEME_ICON = {
@@ -119,7 +119,8 @@ function defaultSettings() {
     footer: "Bizi tercih ettiğiniz için teşekkürler!",
     serEarsiv: "EAR", serEfatura: "EFT", efaturaProfile: "TICARIFATURA", endpoint: "", token: "",
     defaultMode: "perakende", allowNegative: true, expenseCats: ["Yakıt", "Yemek", "Araç bakım", "Kira", "Fatura (elektrik/su/tel.)", "Vergi/SGK", "Maaş", "Kırtasiye/Ambalaj", "Diğer"],
-    categories: ["Oyuncak", "Şekerleme", "Hediyelik"], staffSeeCost: false
+    categories: ["Oyuncak", "Şekerleme", "Hediyelik"], staffSeeCost: false,
+    invoicing: false, staffSimple: true, quick: [], setupDone: false
   };
 }
 // cihaza özel ayarlar (yazıcı)
@@ -177,7 +178,10 @@ async function loadAll(silent) {
     if (!silent) toast(e.message); return "error";
   }
 }
-function setOnline(v) { online = v; const el = $("#netPill"); if (el) { el.textContent = v ? (Q.items.length ? `⏳ ${Q.items.length} bekliyor` : "● Çevrimiçi") : `○ Çevrimdışı${Q.items.length ? " · " + Q.items.length : ""}`; el.className = "pill " + (v ? (Q.items.length ? "warn" : "on") : "off"); } }
+function setOnline(v) { online = v; const el = $("#netPill"); if (!el) return; const n = Q.items.length; const fail = Q.items.some(o => o.failed);
+  if (v && !n) { el.style.display = "none"; return; }
+  el.style.display = ""; el.textContent = !v ? `○ Çevrimdışı${n ? " · " + n : ""}` : fail ? `⚠ ${n} gönderilemedi` : `⏳ ${n} bekliyor`; el.className = "pill " + (!v || fail ? "off" : "warn");
+  el.onclick = () => typeof go === "function" && go("kuyruk"); }
 
 /* =================== GÖNDERİM KUYRUĞU (çevrimdışı) =================== */
 const Q = {
@@ -390,16 +394,19 @@ function escpos(lines) {
 }
 let bt = { dev: null, ch: null };
 const BT_SERVICES = ["000018f0-0000-1000-8000-00805f9b34fb", "e7810a71-73ae-499d-8c15-faa9aef0c3f2", "49535343-fe7d-4ae5-8fa9-9fafd205e455", "0000ff00-0000-1000-8000-00805f9b34fb", "0000ffe0-0000-1000-8000-00805f9b34fb", "0000fee7-0000-1000-8000-00805f9b34fb"];
-function updPrnPill() { const p = $("#prnPill"); if (!p) return; const m = setting("printMode"); if (m === "bt") { p.textContent = bt.ch ? "🖨 " + (bt.dev.name || "Bağlı") : "🖨 Bağlı değil"; p.className = "pill" + (bt.ch ? " on" : ""); p.onclick = () => btConnect(true); } else { p.textContent = m === "rawbt" ? "🖨 RawBT" : "🖨 Sistem"; p.className = "pill on"; p.onclick = null; } }
+// Yazıcı rozeti yalnızca sorun varken görünür: BT yazıcı daha önce kullanılmış ama şu an bağlı değil
+function updPrnPill() { const p = $("#prnPill"); if (!p) return; const m = setting("printMode");
+  if (m === "bt" && !bt.ch && (bt.dev || lsGet("ss_btused", false))) { p.style.display = ""; p.textContent = "🖨 Yazıcıyı bağla"; p.className = "pill warn"; p.onclick = () => btConnect(!bt.dev); }
+  else { p.style.display = "none"; p.onclick = null; } }
 async function btConnect(interactive) {
-  if (!navigator.bluetooth) { dialog(`<h3>Bluetooth kullanılamıyor</h3><div class="hint">Bu tarayıcı doğrudan Bluetooth yazıcı bağlantısını desteklemiyor. Android'de <b>Chrome</b> kullanın. iPhone/iPad'de Menü → Ayarlar → Yazıcı bölümünden “Sistem yazdırma”yı seçin.</div><div class="acts"><button class="btn pri" data-close>Tamam</button></div>`); return false; }
+  if (!navigator.bluetooth) { dialog(`<h3>Bluetooth kullanılamıyor</h3><div class="hint">Bu tarayıcı doğrudan Bluetooth yazıcı bağlantısını desteklemiyor. Android'de <b>Chrome</b> kullanın. iPhone/iPad'de Daha → Ayarlar → Yazıcı bölümünden “Sistem yazdırma”yı seçin.</div><div class="acts"><button class="btn pri" data-close>Tamam</button></div>`); return false; }
   try {
     if (!bt.dev || interactive) { bt.dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: BT_SERVICES }); bt.dev.addEventListener("gattserverdisconnected", () => { bt.ch = null; updPrnPill(); }); }
     const srv = await bt.dev.gatt.connect(); let found = null;
     for (const u of BT_SERVICES) { try { const s = await srv.getPrimaryService(u); for (const c of await s.getCharacteristics()) { if (c.properties.write || c.properties.writeWithoutResponse) { found = c; break; } } } catch (e) { } if (found) break; }
     if (!found) { try { for (const s of await srv.getPrimaryServices()) { for (const c of await s.getCharacteristics()) { if (c.properties.write || c.properties.writeWithoutResponse) { found = c; break; } } if (found) break; } } catch (e) { } }
     if (!found) throw new Error("Yazma kanalı bulunamadı");
-    bt.ch = found; updPrnPill(); toast("Yazıcı bağlandı: " + (bt.dev.name || "")); return true;
+    bt.ch = found; lsSet("ss_btused", true); updPrnPill(); toast("Yazıcı bağlandı: " + (bt.dev.name || "")); return true;
   } catch (e) { if (e && e.name !== "NotFoundError") toast("Bağlanamadı: " + (e.message || e)); updPrnPill(); return false; }
 }
 async function btWrite(data) { for (let i = 0; i < data.length; i += 180) { const part = data.slice(i, i + 180); if (bt.ch.properties.writeWithoutResponse && bt.ch.writeValueWithoutResponse) { await bt.ch.writeValueWithoutResponse(part); await new Promise(r => setTimeout(r, 25)); } else await bt.ch.writeValue(part); } }

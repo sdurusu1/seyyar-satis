@@ -10,7 +10,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Seyyar Satış</title>
-<script>try{var t=localStorage.getItem("ss_theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}</script>
+<script>try{var t=localStorage.getItem("ss_theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;if(JSON.parse(localStorage.getItem("ss_font"))==="big")document.documentElement.classList.add("big");}catch(e){}</script>
 <style>
 :root{--bg:#f4f5f2;--card:#fff;--ink:#1c1f1d;--muted:#6b716d;--line:#e2e5e0;--pri:#0f766e;--pri-ink:#fff;--pri-soft:#e1f2ef;--warn:#b45309;--warn-soft:#fdf1e2;--bad:#b42318;--bad-soft:#fdeceb;--ok:#15803d;--r:14px}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#121513;--card:#1c201e;--ink:#eef1ee;--muted:#9aa39e;--line:#2c322f;--pri:#2bb3a3;--pri-ink:#06201d;--pri-soft:#173430;--warn:#f0a44b;--warn-soft:#352816;--bad:#f97066;--bad-soft:#3a1c1a;--ok:#4ade80;color-scheme:dark}}
@@ -101,20 +101,44 @@ pre.rc{font:12.5px/1.35 ui-monospace,Menlo,Consolas,monospace;background:var(--b
 .inv table{width:100%;border-collapse:collapse}.inv td,.inv th{border:1px solid #999;padding:4px 5px;text-align:left}.inv th{background:#eee}.inv .r{text-align:right}
 .inv .hd{display:flex;justify-content:space-between;gap:16px;margin-bottom:10px}.inv .box{border:1px solid #999;padding:8px;flex:1}
 .thermal{font:12px/1.3 ui-monospace,Menlo,Consolas,monospace;white-space:pre;color:#000;background:#fff}
+/* v2.2 sade arayüz */
+html.big{font-size:18px}html.big body{zoom:1.12}
+.today{display:flex;gap:8px;overflow-x:auto;margin:0 0 10px;padding:10px 12px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);cursor:pointer;scrollbar-width:none}
+.today>div{display:flex;flex-direction:column;min-width:76px;flex:1}.today .k{font-size:11px;color:var(--muted)}.today b{font-size:16px}
+.bigin{font-size:18px!important;min-height:52px}.btn.big1,.big1{min-height:52px;min-width:52px}
+.qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;margin-bottom:12px}
+.qt{position:relative;font:inherit;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;min-height:74px;display:flex;flex-direction:column;justify-content:space-between;gap:4px;color:var(--ink);cursor:pointer}
+.qt:active{transform:scale(.97)}.qt.in{border-color:var(--pri);background:var(--pri-soft)}
+.qn{font-size:13px;font-weight:600;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.qp{font-size:13px;color:var(--muted)}.qt.in .qp{color:var(--pri)}
+.qc{position:absolute;top:-7px;right:-7px;background:var(--pri);color:var(--pri-ink);border-radius:99px;min-width:24px;height:24px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 6px}
+.qe{align-items:center;justify-content:center;color:var(--muted);border-style:dashed;font-size:20px}.qe .qn{font-size:12px;font-weight:500}
+.star{font-size:20px;color:var(--line);margin-right:4px}.star.on{color:#f5b301}
+.seg.big button{min-height:52px;font-size:16px}.seg.big button.on{background:var(--pri);color:var(--pri-ink)}
+.btn.big{min-height:58px;font-size:18px;margin-top:10px}
+details.other{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+details.other>summary{cursor:pointer;color:var(--muted);font-size:14px;padding:6px 0;list-style:none}details.other>summary::-webkit-details-marker{display:none}
+details.other>summary::before{content:"▸ ";}details.other[open]>summary::before{content:"▾ "}
+.cash{text-align:center}.cgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}.cgrid .btn{min-height:56px;font-size:16px}
+.change{margin:12px 0 4px;font-size:15px;color:var(--muted);text-align:center}.change b,.change .big1{display:block;font-size:38px;font-weight:800;color:var(--ok)}
+.sheet{display:flex;flex-direction:column;gap:6px}.sheet .btn{min-height:52px}
+.xbtn{display:inline-flex;width:28px;height:28px;align-items:center;justify-content:center;border-radius:99px;color:var(--muted);margin-left:4px}.xbtn svg{width:16px;height:16px}
+.pillsel{width:auto;min-height:32px;padding:4px 10px;font-size:13px;border-radius:99px}
+.steps{display:flex;gap:6px;margin-bottom:10px;font-size:12px}.steps span{flex:1;padding:6px;border-radius:8px;background:var(--bg);color:var(--muted);text-align:center}.steps .on{background:var(--pri-soft);color:var(--pri);font-weight:700}.steps .done{color:var(--ok)}
 </style>
 </head>
 <body>
 <header>
   <button id="backBtn" style="display:none" aria-label="Geri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
   <h1 id="ttl">Satış</h1>
-  <span class="pill" id="netPill">●</span>
-  <span class="pill" id="prnPill">🖨</span>
+  <span class="pill" id="netPill" style="display:none">●</span>
+  <span class="pill" id="prnPill" style="display:none">🖨</span>
   <button id="themeBtn" aria-label="Tema"></button>
 </header>
 <main id="app"></main>
 <nav id="nav"></nav>
 <div id="printArea"></div>
-<script src="js/core.js?v=2.1"></script>
-<script src="js/views.js?v=2.1"></script>
+<script src="js/core.js?v=2.2"></script>
+<script src="js/views.js?v=2.2"></script>
 </body>
 </html>
