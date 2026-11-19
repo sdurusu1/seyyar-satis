@@ -2,7 +2,9 @@
 /* =================== AYAR =================== */
 const SUPA_URL = "https://kzwmlhncpxylqvveohsb.supabase.co";
 const SUPA_KEY = "sb_publishable_mTWX0XH4IS7hbr4ZhUA0xg_rQez37iM";
-const APP_VER = "2.9";
+const APP_VER = "3.0";
+const DEMO = !!window.DEMO; // örnek verili vitrin: ayrı depolama, sunucuya hiçbir şey gitmez
+const LSP = DEMO ? "demo_" : "";
 /* =================== TEMA =================== */
 const THEMES = { auto: "Otomatik", light: "Açık", dark: "Koyu" };
 const THEME_ICON = {
@@ -37,8 +39,8 @@ const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xx
 const ymd = d => { d = new Date(d); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
 const startOfDay = d => { d = new Date(d); d.setHours(0, 0, 0, 0); return d; };
 const addDays = (d, n) => { d = new Date(d); d.setDate(d.getDate() + n); return d; };
-const lsGet = (k, def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (e) { return def; } };
-const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
+const lsGet = (k, def) => { try { const v = localStorage.getItem(LSP + k); return v ? JSON.parse(v) : def; } catch (e) { return def; } };
+const lsSet = (k, v) => { try { localStorage.setItem(LSP + k, JSON.stringify(v)); return true; } catch (e) { return false; } };
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const sum = (arr, f) => r2(arr.reduce((a, x) => a + (+f(x) || 0), 0));
 
@@ -109,7 +111,20 @@ function dbMsg(m) {
 const isNetErr = e => !e.server && (e instanceof TypeError || /fetch|network|Failed|load/i.test(String(e.message)));
 
 /* =================== VERİ DEPOSU =================== */
-const D = lsGet("ss_cache", null) || { products: [], parties: [], accounts: [], settings: {}, pbal: {}, abal: {}, docs: [], users: [], role: null, loadedAt: null };
+const D = { products: [], parties: [], accounts: [], settings: {}, pbal: {}, abal: {}, docs: [], users: [], role: null, loadedAt: null };
+// Büyük veriler için IndexedDB (localStorage ~5 MB ile sınırlı)
+const IDB = {
+  db: null,
+  open() { return this.db || (this.db = new Promise((res, rej) => { const r = indexedDB.open("seyyar" + LSP, 1); r.onupgradeneeded = () => r.result.createObjectStore("kv"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); })); },
+  async get(k) { try { const db = await this.open(); return await new Promise(res => { const q = db.transaction("kv").objectStore("kv").get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(undefined); }); } catch (e) { return undefined; } },
+  async set(k, v) { try { const db = await this.open(); return await new Promise(res => { const tx = db.transaction("kv", "readwrite"); tx.objectStore("kv").put(v, k); tx.oncomplete = () => res(true); tx.onerror = () => res(false); }); } catch (e) { return false; } }
+};
+async function loadCache() {
+  let c = await IDB.get("cache");
+  if (!c) { c = lsGet("ss_cache", null); if (c) { await IDB.set("cache", c); try { localStorage.removeItem(LSP + "ss_cache"); } catch (e) { } } }
+  if (c) Object.assign(D, c);
+}
+async function clearCache() { await IDB.set("cache", null); try { localStorage.removeItem(LSP + "ss_cache"); } catch (e) { } }
 D.docs = D.docs || [];
 const S = () => Object.assign(defaultSettings(), D.settings || {});
 function defaultSettings() {
@@ -129,9 +144,17 @@ const LS = () => Object.assign({}, lsGet("ss_local", {}));
 function setting(k) { const l = LS(); return (LOCAL_KEYS.includes(k) && l[k] !== undefined) ? l[k] : S()[k]; }
 function setLocal(k, v) { const l = LS(); l[k] = v; lsSet("ss_local", l); }
 
-const saveCache = debounce(() => { if (!lsSet("ss_cache", D)) { const c = { ...D, docs: D.docs.slice(0, 100) }; lsSet("ss_cache", c); } }, 400);
-const prodById = id => D.products.find(p => p.id === id);
-const partyById = id => D.parties.find(p => p.id === id);
+const saveCache = debounce(() => { IDB.set("cache", JSON.parse(JSON.stringify(D))); }, 600);
+// hızlı arama için kimlik dizinleri (dizi değişince yeniden kurulur)
+let _pm = null, _pmA = null, _pmN = -1, _cm = null, _cmA = null, _cmN = -1;
+const prodById = id => { if (_pmA !== D.products || _pmN !== D.products.length) { _pm = new Map(D.products.map(p => [p.id, p])); _pmA = D.products; _pmN = D.products.length; } return _pm.get(id) || (id && D.products.find(p => p.id === id)); };
+const partyById = id => { if (_cmA !== D.parties || _cmN !== D.parties.length) { _cm = new Map(D.parties.map(p => [p.id, p])); _cmA = D.parties; _cmN = D.parties.length; } return _cm.get(id) || (id && D.parties.find(p => p.id === id)); };
+// firma / paket
+const T = () => D.tenant || null;
+function hasMod(m) { const t = T(); return !t || !Array.isArray(t.modules) || t.modules.includes(m); }
+function isDemoMode() { return DEMO || (T() && T().status === "demo"); }
+function canWrite() { return DEMO || D.writable !== false; }
+function daysLeft() { const t = T(); if (!t) return null; const u = t.status === "demo" ? t.demo_until : t.paid_until; return u ? Math.ceil((new Date(u) - Date.now()) / 864e5) : null; }
 const accById = id => D.accounts.find(a => a.id === id);
 const isAdmin = () => D.role === "yonetici";
 const canSeeCost = () => isAdmin() || S().staffSeeCost;
@@ -148,21 +171,23 @@ function numify(p) { ["retail", "wholesale", "cost", "stock", "min_stock", "pack
 let online = navigator.onLine;
 async function loadAll(silent) {
   try {
-    const role = await API.rpc("claim_first_admin", {});
-    D.role = role;
-    if (!role) { D.loadedAt = null; saveCache(); return "noaccess"; }
+    const me = await API.rpc("my_tenant", {});
+    D.me = me; D.role = me.role; D.vendor = !!me.vendor; D.contact = me.contact || ""; D.brand = me.brand || "Seyyar Satış";
+    if (!me.role) { D.loadedAt = null; D.tenant = null; saveCache(); return "noaccess"; }
+    if (D.tenant && me.tenant && D.tenant.id !== me.tenant.id) { D.docs = []; D.pprice = {}; }
+    D.tenant = me.tenant; D.writable = me.writable;
     const since = addDays(new Date(), -45).toISOString();
     const t0 = startOfDay(new Date()).toISOString();
     const [products, parties, accounts, settings, pb, ab, docs, users, pprices, vehicles, vstock, visits] = await Promise.all([
       API.getAll("products", "select=*&order=name.asc"),
       API.getAll("parties", "select=*&order=name.asc"),
       API.get("accounts?select=*&order=sort.asc"),
-      API.get("settings?select=data&id=eq.1"),
+      API.get("settings?select=data"),
       API.getAll("party_balances", "select=id,balance,last_move,last_visit"),
       API.get("account_balances?select=id,balance"),
       API.get(`documents?select=*,document_lines(*)&date=gte.${encodeURIComponent(since)}&order=date.desc&limit=400`),
       API.get("app_users?select=*&order=created_at.asc"),
-      API.getAll("party_prices", "select=party_id,product_id,price,base").catch(() => []),
+      Promise.resolve([]),
       API.get("vehicles?select=*&order=sort.asc,name.asc").catch(() => []),
       API.getAll("vehicle_stock", "select=vehicle_id,product_id,qty").catch(() => []),
       API.get(`visits?select=*&date=gte.${encodeURIComponent(t0)}&order=date.desc`).catch(() => [])
@@ -171,7 +196,7 @@ async function loadAll(silent) {
     D.settings = (settings[0] && settings[0].data) || {};
     D.pbal = {}; pb.forEach(x => D.pbal[x.id] = +x.balance);
     D.plast = {}; pb.forEach(x => D.plast[x.id] = x.last_move);
-    D.pprice = {}; pprices.forEach(x => D.pprice[x.party_id + "|" + x.product_id] = { price: +x.price, base: x.base === null ? null : +x.base });
+    D.pprice = D.pprice || {}; pprices.forEach(x => D.pprice[x.party_id + "|" + x.product_id] = { price: +x.price, base: x.base === null ? null : +x.base });
     D.vehicles = vehicles; D.vstock = {}; vstock.forEach(x => { (D.vstock[x.vehicle_id] = D.vstock[x.vehicle_id] || {})[x.product_id] = +x.qty; });
     D.visits = visits;
     D.abal = {}; ab.forEach(x => D.abal[x.id] = +x.balance);
@@ -226,12 +251,15 @@ window.addEventListener("offline", () => setOnline(false));
 setInterval(() => { if (Q.items.some(o => !o.failed)) Q.flush(); }, 30000);
 
 // Doğrudan çevrimiçi RPC (sonucu gereken işlemler için), değilse kuyruğa
+const READONLY_MSG = () => "Kullanım süreniz dolmuş; yalnızca görüntüleyebilirsiniz." + (D.contact ? " Satıcı: " + D.contact : "");
 async function rpcNowOrQueue(fn, args, label, onDone) {
+  if (!canWrite()) throw new Error(READONLY_MSG());
   if (Q.items.some(o => !o.failed) || !online) { Q.add({ kind: "rpc", fn, args, label, onDone }); return { queued: true }; }
   try { const r = await API.rpc(fn, args); return r; }
   catch (e) { if (isNetErr(e)) { setOnline(false); Q.add({ kind: "rpc", fn, args, label, onDone }); return { queued: true }; } throw e; }
 }
 async function writeNowOrQueue(op) {
+  if (!canWrite()) throw new Error(READONLY_MSG());
   if (Q.items.some(o => !o.failed) || !online) { Q.add(op); return { queued: true }; }
   try { return await Q.exec(op); }
   catch (e) { if (isNetErr(e)) { setOnline(false); Q.add(op); return { queued: true }; } throw e; }
@@ -420,6 +448,7 @@ async function btConnect(interactive) {
 async function btWrite(data) { for (let i = 0; i < data.length; i += 180) { const part = data.slice(i, i + 180); if (bt.ch.properties.writeWithoutResponse && bt.ch.writeValueWithoutResponse) { await bt.ch.writeValueWithoutResponse(part); await new Promise(r => setTimeout(r, 25)); } else await bt.ch.writeValue(part); } }
 function b64(u8) { let s = ""; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); }
 async function printLines(lines) {
+  if (isDemoMode()) lines = [{ t: "*** ÖRNEKTİR ***", c: 1, b: 1 }, { t: "Mali değeri yoktur", c: 1 }, "", ...lines, { t: "*** ÖRNEKTİR ***", c: 1, b: 1 }, ""];
   const copies = Math.max(1, Math.min(5, +setting("copies") || 1)); const mode = setting("printMode");
   if (mode === "system") { systemPrint(`<div class="thermal" style="width:${+setting("paper") === 80 ? "72mm" : "48mm"}">${lines.map(L => { L = typeof L === "string" ? { t: L } : L; return `<div style="text-align:${L.c ? "center" : "left"};font-weight:${L.b ? 700 : 400}">${esc(L.t) || "&nbsp;"}</div>`; }).join("")}</div>`); return; }
   let data = escpos(lines);
@@ -429,7 +458,7 @@ async function printLines(lines) {
   try { await btWrite(data); toast("Yazdırıldı"); }
   catch (e) { bt.ch = null; const ok = await btConnect(false); if (ok) { try { await btWrite(data); toast("Yazdırıldı"); return; } catch (_) { } } toast("Yazdırılamadı: " + (e.message || e)); updPrnPill(); }
 }
-function systemPrint(html) { const pa = $("#printArea"); pa.innerHTML = html; try { window.print(); } catch (e) { toast("Yazdırma açılamadı"); } setTimeout(() => { pa.innerHTML = ""; }, 1500); }
+function systemPrint(html) { const pa = $("#printArea"); pa.innerHTML = (isDemoMode() ? '<div class="pwm">ÖRNEKTİR</div>' : "") + html; try { window.print(); } catch (e) { toast("Yazdırma açılamadı"); } setTimeout(() => { pa.innerHTML = ""; }, 1500); }
 function printDoc(doc) { printLines(buildText(doc)); }
 function printA4(doc) {
   const st = S(), c = doc.party, vb = vatBreak(doc), inv = doc.doc_kind === "earsiv" || doc.doc_kind === "efatura";
