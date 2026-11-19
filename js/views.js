@@ -269,7 +269,7 @@ function pickParty(kind, cb) {
     const draw = () => {
       const f = fold(d.querySelector("#cq").value); const all = d.querySelector("#call").checked;
       const l = D.parties.filter(c => c.active !== false && (all || c.kind === kind || c.kind === "her_ikisi") && (!f || fold(c.name + " " + (c.phone || "") + " " + (c.vkn || "")).includes(f))).slice(0, 100);
-      d.querySelector("#cl").innerHTML = l.length ? l.map(c => `<div class="it" data-c="${c.id}" style="cursor:pointer"><div class="grow"><div class="t">${esc(c.name)} ${c.efatura ? '<span class="tag">e-Fatura</span>' : ""} ${c.price_type === "toptan" ? '<span class="tag">Toptan</span>' : ""}</div><div class="small muted">${esc(c.phone || "")}</div></div><span class="num ${balance(c.id) > 0 ? "danger" : balance(c.id) < 0 ? "okc" : "muted"}">${tl(balance(c.id))}</span></div>`).join("") : '<div class="empty">Kayıt yok. + ile ekleyin.</div>';
+      d.querySelector("#cl").innerHTML = l.length ? l.map(c => `<div class="it" data-c="${c.id}" style="cursor:pointer"><div class="grow"><div class="t">${esc(c.name)} ${c.efatura ? '<span class="tag">e-Fatura</span>' : ""} ${c.price_type === "toptan" ? '<span class="tag">Toptan</span>' : ""}</div><div class="small muted">${esc([c.district, c.city].filter(Boolean).join(", ") || c.phone || "")}</div></div><span class="num ${balance(c.id) > 0 ? "danger" : balance(c.id) < 0 ? "okc" : "muted"}">${tl(balance(c.id))}</span></div>`).join("") : '<div class="empty">Kayıt yok. + ile ekleyin.</div>';
       $$("[data-c]", d).forEach(el => el.onclick = () => { close(); cb(el.dataset.c); });
     };
     d.querySelector("#cq").oninput = draw; d.querySelector("#call").onchange = draw; draw();
@@ -549,10 +549,10 @@ function vTopluFiyat() {
 }
 
 /* =================== CARİ =================== */
-let cq = "", ckind = "", cflt = "";
+let cq = "", ckind = "", cflt = "", ccity = "";
 function vCari() {
   const f = fold(cq);
-  let list = D.parties.filter(c => (cflt === "pasif" ? c.active === false : c.active !== false) && (!ckind || c.kind === ckind || c.kind === "her_ikisi") && (!f || fold(c.name + " " + (c.phone || "") + " " + (c.vkn || "")).includes(f)));
+  let list = D.parties.filter(c => (cflt === "pasif" ? c.active === false : c.active !== false) && (!ckind || c.kind === ckind || c.kind === "her_ikisi") && (!ccity || [c.city, c.district].filter(Boolean).join(" / ") === ccity || c.city === ccity) && (!f || fold(c.name + " " + (c.phone || "") + " " + (c.vkn || "")).includes(f)));
   if (cflt === "borclu") list = list.filter(c => balance(c.id) > 0.009);
   if (cflt === "alacakli") list = list.filter(c => balance(c.id) < -0.009);
   list.sort(cflt ? (a, b) => Math.abs(balance(b.id)) - Math.abs(balance(a.id)) : (a, b) => a.name.localeCompare(b.name, "tr"));
@@ -561,15 +561,16 @@ function vCari() {
    <div class="stats"><div class="stat clickable" data-f="borclu"><div class="k">Toplam alacak (bize borçlu)</div><div class="v num danger">${tl(rec)}</div></div><div class="stat clickable" data-f="alacakli"><div class="k">Toplam borç (bizim borcumuz)</div><div class="v num okc">${tl(pay)}</div></div></div>
    <div class="card" style="margin-top:12px">
     <div class="row"><input id="cq" class="grow" placeholder="Ad, telefon, VKN ara" value="${esc(cq)}"><button class="btn pri iconbtn" id="cadd">${ICONS.plus}</button></div>
-    <div class="chips" style="margin-top:8px">${[["", "Tümü"], ["musteri", "Müşteriler"], ["tedarikci", "Tedarikçiler"]].map(([k, t]) => `<button class="pill ${ckind === k ? "on" : ""}" data-k="${k}">${t}</button>`).join("")}<span class="sep"></span>${[["", "Hepsi"], ["borclu", "Borçlu"], ["alacakli", "Alacaklı"], ["pasif", "Pasif"]].map(([k, t]) => `<button class="pill ${cflt === k ? "on" : ""}" data-f="${k}">${t}</button>`).join("")}</div>
+    <div class="chips" style="margin-top:8px">${[["", "Tümü"], ["musteri", "Müşteriler"], ["tedarikci", "Tedarikçiler"]].map(([k, t]) => `<button class="pill ${ckind === k ? "on" : ""}" data-k="${k}">${t}</button>`).join("")}${(() => { const cs = [...new Set(D.parties.flatMap(c => c.city ? [c.city, ...(c.district ? [c.city + " / " + c.district] : [])] : []))].sort((a, b) => a.localeCompare(b, "tr")); return cs.length ? `<select class="pillsel" id="ccity"><option value="">Tüm bölgeler</option>${cs.map(x => `<option ${x === ccity ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>` : ""; })()}<span class="sep"></span>${[["", "Hepsi"], ["borclu", "Borçlu"], ["alacakli", "Alacaklı"], ["pasif", "Pasif"]].map(([k, t]) => `<button class="pill ${cflt === k ? "on" : ""}" data-f="${k}">${t}</button>`).join("")}</div>
    </div>
    <div class="row" style="gap:6px;margin-bottom:10px"><button class="btn sm" id="cexp">${ICONS.dl} Excel</button></div>
    <div class="card list">${list.length ? list.slice(0, 300).map(c => { const b = balance(c.id); return `<div class="it click" data-c="${c.id}">
-      <div class="grow"><div class="t">${esc(c.name)}</div><div class="small muted">${c.kind === "tedarikci" ? '<span class="tag">Tedarikçi</span> ' : c.kind === "her_ikisi" ? '<span class="tag">Müş.+Ted.</span> ' : ""}${c.price_type === "toptan" ? '<span class="tag">Toptan</span> ' : ""}${esc(c.phone || "")}</div></div>
+      <div class="grow"><div class="t">${esc(c.name)}</div><div class="small muted">${c.kind === "tedarikci" ? '<span class="tag">Tedarikçi</span> ' : c.kind === "her_ikisi" ? '<span class="tag">Müş.+Ted.</span> ' : ""}${c.price_type === "toptan" ? '<span class="tag">Toptan</span> ' : ""}${esc([c.district, c.city].filter(Boolean).join(", ") || c.phone || "")}</div></div>
       <div class="right num ${b > 0 ? "danger" : b < 0 ? "okc" : "muted"}"><b>${tl(Math.abs(b))}</b><div class="small muted">${b > 0.009 ? "borçlu" : b < -0.009 ? "alacaklı" : ""}</div></div></div>`; }).join("") : '<div class="empty">Kayıt yok.</div>'}</div>`;
   const inp = $("#cq"); inp.oninput = debounce(() => { cq = inp.value; const pos = inp.selectionStart; vCari(); const n = $("#cq"); n.focus(); n.setSelectionRange(pos, pos); }, 250);
   $$("[data-k]").forEach(b => b.onclick = () => { ckind = b.dataset.k; vCari(); });
   $$("[data-f]").forEach(b => b.onclick = () => { cflt = b.dataset.f; vCari(); });
+  const cc = $("#ccity"); if (cc) cc.onchange = () => { ccity = cc.value; vCari(); };
   $$("[data-c]").forEach(el => el.onclick = () => go("caridetay", { id: el.dataset.c }));
   $("#cadd").onclick = () => partyDialog(null, { kind: ckind || "musteri" });
   $("#cexp").onclick = () => download(`cariler-${ymd(new Date())}.csv`, toCSV(D.parties, [["Ad", c => c.name], ["Tür", c => ({ musteri: "Müşteri", tedarikci: "Tedarikçi", her_ikisi: "Her ikisi" })[c.kind]], ["Telefon", c => c.phone], ["VKN/TCKN", c => c.vkn], ["Vergi dairesi", c => c.tax_office], ["İl", c => c.city], ["Bakiye", c => balance(c.id)], ["Durum", c => balance(c.id) > 0 ? "Borçlu" : balance(c.id) < 0 ? "Alacaklı" : ""]]), "text/csv;charset=utf-8");
@@ -577,8 +578,9 @@ function vCari() {
 function partyDialog(c, preset = {}, after) {
   const isNew = !c; const x = c ? { ...c } : { id: uuid(), kind: "musteri", name: "", phone: "", email: "", vkn: "", tax_office: "", address: "", district: "", city: "", efatura: false, price_type: "perakende", credit_limit: null, due_days: null, note: "", active: true, ...preset };
   const v = k => x[k] === null || x[k] === undefined ? "" : x[k];
-  dialog(`<h3>${isNew ? "Yeni cari" : "Cariyi düzenle"}</h3>
-    <div class="seg" id="kd">${[["musteri", "Müşteri"], ["tedarikci", "Tedarikçi"], ["her_ikisi", "Her ikisi"]].map(([k, t]) => `<button data-k="${k}" class="${x.kind === k ? "on" : ""}">${t}</button>`).join("")}</div>
+  const KN = { musteri: "müşteri", tedarikci: "tedarikçi", her_ikisi: "kayıt" }; const kind0 = x.kind;
+  dialog(`<h3 id="pdT">${isNew ? "Yeni " + KN[x.kind] : "Düzenle: " + esc(x.name)}</h3>
+    <label style="margin-top:4px">Kayıt türü</label><div class="seg" id="kd">${[["musteri", "Müşteri"], ["tedarikci", "Tedarikçi"], ["her_ikisi", "Her ikisi"]].map(([k, t]) => `<button data-k="${k}" class="${x.kind === k ? "on" : ""}">${t}</button>`).join("")}</div>
     <label>Ad Soyad / Unvan *</label><input id="f_name" value="${esc(v("name"))}">
     <div class="grid2">
       <div><label>Telefon</label><input id="f_phone" inputmode="tel" value="${esc(v("phone"))}"></div>
@@ -599,7 +601,7 @@ function partyDialog(c, preset = {}, after) {
     <label>Not</label><input id="f_note" value="${esc(v("note"))}">
     ${isNew ? `<label>Açılış bakiyesi (₺) <span class="muted">— varsa</span></label><div class="grid2"><input id="ob" inputmode="decimal" placeholder="0,00"><select id="obt"><option value="borc">Bize borçlu</option><option value="alacak">Biz borçluyuz</option></select></div>` : ""}
     <div class="acts">${isNew ? '<button class="btn" data-close>Vazgeç</button>' : (isAdmin() ? '<button class="btn bad" id="del">Sil</button>' : '<button class="btn" data-close>Vazgeç</button>')}<button class="btn pri" id="ok">Kaydet</button></div>`, (d, close) => {
-    $$("#kd button", d).forEach(b => b.onclick = () => { x.kind = b.dataset.k; $$("#kd button", d).forEach(y => y.classList.toggle("on", y === b)); });
+    $$("#kd button", d).forEach(b => b.onclick = () => { x.kind = b.dataset.k; $$("#kd button", d).forEach(y => y.classList.toggle("on", y === b)); if (isNew) d.querySelector("#pdT").textContent = "Yeni " + KN[x.kind]; });
     setTimeout(() => !x.name && d.querySelector("#f_name").focus(), 60);
     d.querySelector("#ok").onclick = () => busy(d.querySelector("#ok"), async () => {
       const g = k => d.querySelector("#f_" + k).value.trim();
@@ -611,7 +613,7 @@ function partyDialog(c, preset = {}, after) {
       await writeNowOrQueue({ kind: "upsert", table: "parties", rows: [row], label: "Cari: " + x.name });
       if (isNew) D.parties.push(x); else Object.assign(c, x);
       if (isNew) { const ob = pnum(d.querySelector("#ob").value); if (ob > 0) { const t = d.querySelector("#obt").value; await rpcNowOrQueue("save_cash", { p: { id: uuid(), kind: t === "borc" ? "borc_dekont" : "alacak_dekont", party_id: x.id, amount: ob, note: "Açılış bakiyesi" } }, "Açılış bakiyesi"); D.pbal[x.id] = t === "borc" ? ob : -ob; } }
-      saveCache(); close(); toast("Kaydedildi"); if (after) after(isNew ? x : c); else refreshView();
+      saveCache(); close(); toast(!isNew && x.kind !== kind0 ? `Kaydedildi · kayıt türü “${({ musteri: "Müşteri", tedarikci: "Tedarikçi", her_ikisi: "Her ikisi" })[x.kind]}” oldu` : "Kaydedildi"); if (after) after(isNew ? x : c); else refreshView();
     });
     const del = d.querySelector("#del"); if (del) del.onclick = async () => {
       close(); if (Math.abs(balance(c.id)) > 0.009) { toast("Bakiyesi olan cari silinemez; pasife alabilirsiniz"); return; }
@@ -684,7 +686,9 @@ function cashDialog(kind, opt = {}, after) {
   dialog(`<h3>${T[kind]}${party ? " – " + esc(party.name) : ""}</h3>${party ? `<div class="small muted">Bakiye: ${tl(Math.abs(b))} ${b > 0 ? "(borçlu)" : b < 0 ? "(alacaklı)" : ""}</div>` : ""}
     ${kind === "dekont" ? `<div class="seg" id="dk" style="margin-top:8px"><button data-v="borc_dekont" class="on">Borçlandır (+)</button><button data-v="alacak_dekont">Alacaklandır (−)</button></div><div class="small muted" style="margin-top:4px">Kasa hareketi olmadan cari bakiyesini düzeltir (açılış bakiyesi, iskonto, düzeltme).</div>` : ""}
     <label>Tutar (₺)</label><input id="amt" inputmode="decimal" value="${kind === "tahsilat" && b > 0 ? String(b).replace(".", ",") : kind === "odeme" && b < 0 ? String(-b).replace(".", ",") : ""}">
-    ${kind !== "dekont" ? `<label>${kind === "virman" ? "Çıkan hesap" : "Hesap"}</label><select id="acc">${accs.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join("")}</select>` : ""}
+    ${(kind === "tahsilat" || kind === "odeme") && accs.length > 1 && accs.length <= 4 ? `<label>${kind === "tahsilat" ? "Nasıl ödedi?" : "Nereden ödendi?"}</label><div class="seg big" id="accSeg">${accs.map(a => `<button data-a="${a.id}">${esc(a.type === "kasa" ? "Nakit" : a.type === "pos" ? "Kart" : a.type === "banka" ? "Havale" : a.name)}</button>`).join("")}</div>` : ""}
+    ${party && (kind === "tahsilat" || kind === "odeme") ? `<div class="small muted" id="rem" style="margin-top:6px"></div>` : ""}
+    ${kind !== "dekont" ? `<div ${(kind === "tahsilat" || kind === "odeme") && accs.length > 1 && accs.length <= 4 ? 'style="display:none"' : ""}><label>${kind === "virman" ? "Çıkan hesap" : "Hesap"}</label><select id="acc">${accs.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join("")}</select></div>` : ""}
     ${kind === "virman" ? `<label>Giren hesap</label><select id="acc2">${accs.map((a, i) => `<option value="${a.id}" ${i === 1 ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select>` : ""}
     ${kind === "gider" ? `<label>Gider türü</label><select id="cat">${cats.map(c => `<option>${esc(c)}</option>`).join("")}</select>` : ""}
     ${(kind === "tahsilat" || kind === "odeme") && !party ? `<label>Cari</label><button class="btn block" id="pp" style="justify-content:flex-start">Cari seçin (isteğe bağlı)</button>` : ""}
@@ -697,6 +701,9 @@ function cashDialog(kind, opt = {}, after) {
     const pp = d.querySelector("#pp"); if (pp) pp.onclick = () => pickParty(kind === "odeme" ? "tedarikci" : "musteri", id => { pid = id; pp.textContent = partyById(id).name; });
     $$("#dk button", d).forEach(bt => bt.onclick = () => { dk = bt.dataset.v; $$("#dk button", d).forEach(y => y.classList.toggle("on", y === bt)); });
     const acc = d.querySelector("#acc"); if (acc && kind === "tahsilat") { const k = accs.find(a => a.type === "kasa"); if (k) acc.value = k.id; }
+    const syncSeg = () => $$("#accSeg button", d).forEach(x => x.classList.toggle("on", acc && x.dataset.a === acc.value)); syncSeg();
+    $$("#accSeg button", d).forEach(x => x.onclick = () => { acc.value = x.dataset.a; syncSeg(); });
+    const rem = d.querySelector("#rem"); if (rem) { const upd = () => { const a = r2(pnum(d.querySelector("#amt").value)); const nb = r2(kind === "tahsilat" ? b - a : b + a); rem.innerHTML = a > 0 ? `İşlemden sonra bakiye: <b>${tl(Math.abs(nb))}</b> ${nb > 0.009 ? "(borçlu)" : nb < -0.009 ? "(alacaklı)" : "· hesap kapanır ✓"}` : ""; }; d.querySelector("#amt").oninput = upd; upd(); }
     d.querySelector("#ok").onclick = () => busy(d.querySelector("#ok"), async () => {
       const amt = r2(pnum(d.querySelector("#amt").value)); if (amt <= 0) throw new Error("Tutar girin");
       const k = kind === "dekont" ? dk : kind; const accId = acc ? acc.value : null;
