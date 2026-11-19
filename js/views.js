@@ -643,10 +643,19 @@ function vCariDetay(p) {
     let run = 0; const all = rows.map(l => { run = r2(run + (+l.debit) - (+l.credit)); return { ...l, run }; });
     const opening = since ? (all.filter(l => new Date(l.date) < since).pop() || { run: 0 }).run : 0;
     const shown = all.filter(l => !since || new Date(l.date) >= since).reverse();
-    $("#led").innerHTML = (shown.length ? shown.map(l => `<div class="it ${l.document_id ? "click" : ""}" data-doc="${l.document_id || ""}"><div class="grow"><div class="small"><b>${LK[l.kind] || l.kind}</b> · ${fdt(l.date)}${l.due_date ? ` · <span class="${new Date(l.due_date) < new Date() ? "danger" : "muted"}">vade ${fd(l.due_date)}</span>` : ""}</div><div class="small muted">${esc(l.note || "")}</div></div><div class="right num"><div class="${+l.debit ? "danger" : "okc"}">${+l.debit ? "+" + nf(l.debit) : "−" + nf(l.credit)}</div><div class="small muted">${nf(l.run)}</div></div>${!l.document_id && isAdmin() ? `<button class="btn sm iconbtn" data-dl="${l.cash_move_id || l.id}" style="width:34px;min-height:34px">${ICONS.x}</button>` : ""}</div>`).join("") : '<div class="empty">Bu dönemde hareket yok.</div>')
+    $("#led").innerHTML = (shown.length ? shown.map(l => `<div class="it click" data-doc="${l.document_id || ""}" data-lid="${l.id}"><div class="grow"><div class="small"><b>${LK[l.kind] || l.kind}</b> · ${fdt(l.date)}${l.due_date ? ` · <span class="${new Date(l.due_date) < new Date() ? "danger" : "muted"}">vade ${fd(l.due_date)}</span>` : ""}</div><div class="small muted">${esc(l.note || "")}</div></div><div class="right num"><div class="${+l.debit ? "danger" : "okc"}">${+l.debit ? "+" + nf(l.debit) : "−" + nf(l.credit)}</div><div class="small muted">${nf(l.run)}</div></div>${!l.document_id ? `<span class="muted" style="margin-left:4px">›</span>` : ""}</div>`).join("") : '<div class="empty">Bu dönemde hareket yok.</div>')
       + (since ? `<div class="small muted" style="padding:8px 2px">Dönem başı devir: <b>${nf(opening)}</b></div>` : "");
-    $$("[data-doc]").forEach(el => { if (el.dataset.doc) el.onclick = e => { if (e.target.closest("[data-dl]")) return; openDoc(el.dataset.doc); }; });
-    $$("[data-dl]").forEach(bt => bt.onclick = async () => { if (!await ask("Bu hareket silinsin mi?", "Sil", true)) return; try { await API.rpc("delete_cash", { p_id: bt.dataset.dl }); await loadAll(true); vCariDetay(p); } catch (e) { toast(e.message); } });
+    $$("[data-lid]").forEach(el => el.onclick = () => {
+      if (el.dataset.doc) return openDoc(el.dataset.doc);
+      const l = all.find(x => String(x.id) === el.dataset.lid); if (!l) return;
+      const amt = +l.credit || +l.debit; const rc = l.kind === "tahsilat" || l.kind === "odeme"; const mid = l.cash_move_id || l.id;
+      const getMove = async () => { try { const r = await API.getAll("cash_moves", "select=*&id=eq." + mid); return r[0] || {}; } catch (e) { return {}; } };
+      actionSheet(`${LK[l.kind] || l.kind} · ${tl(amt)}`, [
+        rc && { t: "Makbuzu yazdır", icon: ICONS.print, f: async () => { const m = await getMove(); printReceipt(c, { kind: l.kind, amount: amt, date: l.date, note: l.note, account_id: m.account_id, kalan: l.run, copy: true }); } },
+        rc && c.phone && { t: "Makbuzu WhatsApp ile gönder", f: () => window.open(waLink(c.phone, `${S().firm || ""}\n${l.kind === "odeme" ? "Ödeme" : "Tahsilat"} makbuzu – ${fdt(l.date)}\nSayın ${c.name}\n${l.kind === "odeme" ? "Ödenen" : "Tahsil edilen"}: ${tl(amt)}\nKalan bakiye: ${tl(l.run)}`), "_blank") },
+        isAdmin() && { t: "Bu hareketi sil", s: "Geri alınamaz", bad: true, f: async () => { if (!await ask(`${LK[l.kind] || l.kind} (${tl(amt)}) silinsin mi?`, "Sil", true, "Müşterinin bakiyesi ve kasa buna göre düzeltilir.")) return; try { await API.rpc("delete_cash", { p_id: mid }); await loadAll(true); vCariDetay(p); toast("Silindi"); } catch (e) { toast(e.message); } } }
+      ]);
+    });
     // vadesi geçmiş
     if (b > 0) { const dues = rows.filter(l => +l.debit > 0 && l.due_date && new Date(l.due_date) < startOfDay(new Date())); if (dues.length) $("#overdue").innerHTML = `<span class="danger">Vadesi geçmiş ${dues.length} kayıt var (en eski ${fd(dues[0].due_date)})</span>`; }
   };
@@ -716,7 +725,8 @@ function cashDialog(kind, opt = {}, after) {
 }
 function printReceipt(c, e) {
   const w = PW(), line = "-".repeat(w);
-  printLines([{ t: S().firm || "SEYYAR SATIŞ", c: 1, b: 1 }, { t: "TAHSİLAT MAKBUZU", c: 1, b: 1 }, { t: fdt(e.date), c: 1 }, line, "Sayın: " + c.name, lr("Tahsil edilen", nf(e.amount) + " TL", w), ...(e.note ? wrap(e.note, w) : []), lr("Kalan bakiye", nf(balance(c.id)) + " TL", w), line, "", "Teslim alan: ..................", ""]);
+  const od = e.kind === "odeme"; const a = accById(e.account_id); const kalan = e.kalan !== undefined ? e.kalan : balance(c.id);
+  printLines([{ t: S().firm || "SEYYAR SATIŞ", c: 1, b: 1 }, { t: od ? "ÖDEME MAKBUZU" : "TAHSİLAT MAKBUZU", c: 1, b: 1 }, { t: fdt(e.date), c: 1 }, ...(e.copy ? [{ t: "(Tekrar baskı)", c: 1 }] : []), line, "Sayın: " + c.name, lr(od ? "Ödenen" : "Tahsil edilen", nf(e.amount) + " TL", w), ...(a ? [lr("Ödeme şekli", a.type === "kasa" ? "Nakit" : a.type === "pos" ? "Kredi kartı" : a.type === "banka" ? "Havale/EFT" : a.name, w)] : []), ...(e.note ? wrap(e.note, w) : []), lr("Kalan bakiye", nf(kalan) + " TL", w), line, "", "Teslim alan: ..................", ""]);
 }
 const CK = { satis: "Satış", tahsilat: "Tahsilat", odeme: "Ödeme", alis: "Alış", gider: "Gider", gelir: "Gelir", virman: "Transfer", acilis: "Açılış/düzeltme", iade: "İade", iptal: "İptal" };
 let kday = ymd(new Date()), kacc = "";
@@ -746,8 +756,15 @@ function vKasa() {
     if (tok !== renderTok) return;
     const inn = sum(rows.filter(r => +r.amount > 0 && r.kind !== "virman"), r => r.amount), out = sum(rows.filter(r => +r.amount < 0 && r.kind !== "virman"), r => -r.amount);
     $("#ksum").innerHTML = `Giriş: <b class="okc">${tl(inn)}</b> · Çıkış: <b class="danger">${tl(out)}</b> · Net: <b>${tl(inn - out)}</b>`;
-    $("#kl").innerHTML = rows.length ? rows.map(m => { const pt = partyById(m.party_id); const a = accById(m.account_id); return `<div class="it"><div class="grow"><div class="small"><b>${CK[m.kind] || m.kind}</b>${m.category ? " · " + esc(m.category) : ""} · ${new Date(m.date).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</div><div class="small muted">${esc([pt && pt.name, m.note, a && a.name].filter(Boolean).join(" · "))}${m.created_by && m.created_by !== API.email ? " · " + esc(m.created_by.split("@")[0]) : ""}</div></div><div class="num ${+m.amount < 0 ? "danger" : "okc"}"><b>${+m.amount > 0 ? "+" : ""}${nf(m.amount)}</b></div>${!m.document_id && isAdmin() ? `<button class="btn sm iconbtn" data-dl="${m.id}" style="width:34px;min-height:34px">${ICONS.x}</button>` : ""}</div>`; }).join("") : '<div class="empty">Bu günde hareket yok.</div>';
-    $$("[data-dl]").forEach(bt => bt.onclick = async () => { if (!await ask("Bu kasa hareketi silinsin mi?", "Sil", true)) return; try { await API.rpc("delete_cash", { p_id: bt.dataset.dl }); await loadAll(true); vKasa(); } catch (e) { toast(e.message); } });
+    $("#kl").innerHTML = rows.length ? rows.map(m => { const pt = partyById(m.party_id); const a = accById(m.account_id); return `<div class="it ${m.document_id ? "" : "click"}" data-mid="${m.id}"><div class="grow"><div class="small"><b>${CK[m.kind] || m.kind}</b>${m.category ? " · " + esc(m.category) : ""} · ${new Date(m.date).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</div><div class="small muted">${esc([pt && pt.name, m.note, a && a.name].filter(Boolean).join(" · "))}${m.created_by && m.created_by !== API.email ? " · " + esc(m.created_by.split("@")[0]) : ""}</div></div><div class="num ${+m.amount < 0 ? "danger" : "okc"}"><b>${+m.amount > 0 ? "+" : ""}${nf(m.amount)}</b></div>${!m.document_id ? `<span class="muted" style="margin-left:4px">›</span>` : ""}</div>`; }).join("") : '<div class="empty">Bu günde hareket yok.</div>';
+    $$("[data-mid]").forEach(el => el.onclick = () => {
+      const m = rows.find(x => x.id === el.dataset.mid); if (!m || m.document_id) return; const pt = partyById(m.party_id); const amt = Math.abs(+m.amount);
+      actionSheet(`${CK[m.kind] || m.kind} · ${tl(amt)}`, [
+        pt && (m.kind === "tahsilat" || m.kind === "odeme") && { t: "Makbuzu yazdır", icon: ICONS.print, f: () => printReceipt(pt, { kind: m.kind, amount: amt, date: m.date, note: m.note, account_id: m.account_id, copy: true }) },
+        pt && { t: "Müşteri hesabını aç", f: () => go("caridetay", { id: pt.id }) },
+        isAdmin() && { t: "Bu hareketi sil", s: "Geri alınamaz", bad: true, f: async () => { if (!await ask(`${CK[m.kind] || m.kind} (${tl(amt)}) silinsin mi?`, "Sil", true, pt ? "Müşterinin bakiyesi de düzeltilir." : "")) return; try { await API.rpc("delete_cash", { p_id: m.id }); await loadAll(true); vKasa(); toast("Silindi"); } catch (e) { toast(e.message); } } }
+      ]);
+    });
   }).catch(e => { if (tok === renderTok) $("#kl").innerHTML = `<div class="empty">${isNetErr(e) ? "Çevrimdışı – hareketler görüntülenemiyor" : esc(e.message)}</div>`; });
 }
 function accountsDialog() {
