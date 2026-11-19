@@ -2,7 +2,7 @@
 /* =================== AYAR =================== */
 const SUPA_URL = "https://kzwmlhncpxylqvveohsb.supabase.co";
 const SUPA_KEY = "sb_publishable_mTWX0XH4IS7hbr4ZhUA0xg_rQez37iM";
-const APP_VER = "2.4";
+const APP_VER = "2.5";
 /* =================== TEMA =================== */
 const THEMES = { auto: "Otomatik", light: "Açık", dark: "Koyu" };
 const THEME_ICON = {
