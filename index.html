@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0f766e">
+<meta name="theme-color" content="#2340d9">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.json">
@@ -12,9 +14,9 @@
 <title>Seyyar Satış</title>
 <script>try{var t=localStorage.getItem("ss_theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;if(JSON.parse(localStorage.getItem("ss_font"))==="big")document.documentElement.classList.add("big");}catch(e){}</script>
 <style>
-:root{--bg:#f4f5f2;--card:#fff;--ink:#1c1f1d;--muted:#6b716d;--line:#e2e5e0;--pri:#0f766e;--pri-ink:#fff;--pri-soft:#e1f2ef;--warn:#b45309;--warn-soft:#fdf1e2;--bad:#b42318;--bad-soft:#fdeceb;--ok:#15803d;--r:14px}
-@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#121513;--card:#1c201e;--ink:#eef1ee;--muted:#9aa39e;--line:#2c322f;--pri:#2bb3a3;--pri-ink:#06201d;--pri-soft:#173430;--warn:#f0a44b;--warn-soft:#352816;--bad:#f97066;--bad-soft:#3a1c1a;--ok:#4ade80;color-scheme:dark}}
-:root[data-theme=dark]{--bg:#121513;--card:#1c201e;--ink:#eef1ee;--muted:#9aa39e;--line:#2c322f;--pri:#2bb3a3;--pri-ink:#06201d;--pri-soft:#173430;--warn:#f0a44b;--warn-soft:#352816;--bad:#f97066;--bad-soft:#3a1c1a;--ok:#4ade80;color-scheme:dark}
+:root{--bg:#eef0f7;--card:#fff;--ink:#141938;--muted:#5f6787;--line:#dde1ee;--pri:#2340d9;--pri-ink:#fff;--pri-soft:#e6eaff;--acc:#ffcf33;--acc-ink:#141938;--warn:#b86a00;--warn-soft:#fff2d6;--bad:#d42a3a;--bad-soft:#ffe8ea;--ok:#0b8a5f;--band:#2340d9;--r:20px}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0d1028;--card:#171b3a;--ink:#eef0ff;--muted:#9aa1c7;--line:#272d57;--pri:#7088ff;--pri-ink:#0d1028;--pri-soft:#222a5e;--acc:#ffcf33;--acc-ink:#141938;--warn:#ffb547;--warn-soft:#3a2d12;--bad:#ff6b78;--bad-soft:#3d1a22;--ok:#3ddc97;--band:#1d2a8a;color-scheme:dark}}
+:root[data-theme=dark]{--bg:#0d1028;--card:#171b3a;--ink:#eef0ff;--muted:#9aa1c7;--line:#272d57;--pri:#7088ff;--pri-ink:#0d1028;--pri-soft:#222a5e;--acc:#ffcf33;--acc-ink:#141938;--warn:#ffb547;--warn-soft:#3a2d12;--bad:#ff6b78;--bad-soft:#3d1a22;--ok:#3ddc97;--band:#1d2a8a;color-scheme:dark}
 :root[data-theme=light]{color-scheme:light}
 #themeBtn{width:38px;height:38px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:99px;padding:8px;flex:none}#themeBtn svg{width:20px;height:20px}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -127,6 +129,65 @@ details.other>summary::before{content:"▸ ";}details.other[open]>summary::befor
 .steps{display:flex;gap:6px;margin-bottom:10px;font-size:12px}.steps span{flex:1;padding:6px;border-radius:8px;background:var(--bg);color:var(--muted);text-align:center}.steps .on{background:var(--pri-soft);color:var(--pri);font-weight:700}.steps .done{color:var(--ok)}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.grid3 .btn{padding:10px 6px;font-size:14px}
 .seg.mini button{min-height:28px;padding:2px 4px;font-size:12px}
+/* v2.8 tasarım: kobalt tabela */
+html{background:var(--bg)}
+html,body{font-family:"Rubik",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:-.005em}
+body{background:transparent;position:relative;min-height:100vh}
+body:not(.auth)::before{content:"";position:absolute;z-index:-1;left:0;right:0;top:0;height:calc(150px + env(safe-area-inset-top));background:var(--band);border-radius:0 0 32px 32px}
+header{background:var(--band);color:#fff;border-bottom:0;padding:10px 16px 12px}
+header h1{font-size:22px;font-weight:700;letter-spacing:-.02em}
+#backBtn{color:#fff}
+#themeBtn{background:rgba(255,255,255,.14);border-color:transparent;color:#fff}
+header .pill{border-color:transparent}
+main{padding:6px 14px calc(100px + env(safe-area-inset-bottom))}
+h2{font-size:18px;font-weight:700;letter-spacing:-.01em}h3{font-size:16px;font-weight:600}
+.card{border-radius:var(--r);border-color:transparent;padding:16px}
+:root[data-theme=dark] .card{border-color:var(--line)}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .card{border-color:var(--line)}}
+.stat{border-radius:16px;border-color:transparent;background:var(--bg)}
+.card .stat{background:var(--bg)}
+.stats>.stat{background:var(--card)}
+.stat .v{font-size:22px;font-weight:700;letter-spacing:-.02em}
+input,select,textarea{border-radius:14px;background:var(--bg);border-color:transparent}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--pri);background:var(--card)}
+.btn{border-radius:14px;font-weight:600;border-color:var(--line)}
+.btn.pri{box-shadow:0 6px 16px -8px var(--pri)}
+.btn.big{border-radius:18px;font-size:19px;font-weight:700;min-height:60px}
+.seg{border-radius:14px;border-color:transparent}
+.seg button{border-radius:11px}
+.seg.big button.on{background:var(--pri);color:var(--pri-ink);box-shadow:none}
+.pill{border-radius:99px;padding:6px 12px;font-size:13px}
+.pill.on{background:var(--ink);color:var(--card)}
+.tag{border-radius:6px}
+.list .it{padding:13px 2px}
+.total{font-size:34px;font-weight:700;letter-spacing:-.03em}
+.today{background:var(--card);border:0;border-radius:var(--r);padding:14px 16px}
+.today b{font-size:18px;font-weight:700;letter-spacing:-.02em}
+.qt{border-radius:16px;border:1.5px solid transparent;min-height:80px}
+.qt.in{border-color:var(--pri);background:var(--pri-soft)}
+.qc{background:var(--acc);color:var(--acc-ink);top:-8px;right:-6px;min-width:26px;height:26px;font-size:13px;box-shadow:0 0 0 3px var(--bg)}
+.qe{border:1.5px dashed var(--line);background:transparent}
+.qty button{border-radius:12px;border-color:transparent;background:var(--bg)}
+.qty input{border-radius:12px}
+nav{left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));padding:6px;border:0;border-radius:24px;background:var(--card);box-shadow:0 10px 30px -12px rgba(20,25,56,.35)}
+nav button{border-radius:18px;padding:7px 2px 6px;font-size:11.5px;gap:2px}
+nav button.act{background:var(--pri-soft);color:var(--pri)}
+.toast{border-radius:16px;bottom:calc(96px + env(safe-area-inset-bottom))}
+.ov{background:rgba(13,16,40,.5)}
+.dlg{border-radius:28px 28px 0 0;padding-top:22px;position:relative}
+.dlg::before{content:"";position:absolute;top:8px;left:50%;width:40px;height:4px;margin-left:-20px;border-radius:4px;background:var(--line)}
+@media(min-width:620px){.dlg{border-radius:28px}.dlg::before{display:none}}
+.results{border-radius:16px;border-color:var(--line)}
+.banner{border-radius:16px}
+.login .logo{border-radius:20px;background:var(--band)}
+.login h1{font-weight:700;letter-spacing:-.02em}
+.change b,.change .big1{font-weight:700}
+.star.on{color:var(--acc)}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+body.auth input,body.auth select{background:var(--card);border-color:var(--line)}
+.searchbox input{background:var(--card);border-color:var(--line)}
+.card .searchbox input{background:var(--bg);border-color:transparent}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation-duration:0s!important}}
 </style>
 </head>
 <body>
@@ -140,7 +201,7 @@ details.other>summary::before{content:"▸ ";}details.other[open]>summary::befor
 <main id="app"></main>
 <nav id="nav"></nav>
 <div id="printArea"></div>
-<script src="js/core.js?v=2.7"></script>
-<script src="js/views.js?v=2.7"></script>
+<script src="js/core.js?v=2.8"></script>
+<script src="js/views.js?v=2.8"></script>
 </body>
 </html>

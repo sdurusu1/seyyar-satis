@@ -40,7 +40,7 @@ function vLogin() {
   document.body.classList.add("auth");
   $("#app").innerHTML = `<div class="login">
     <div class="logo">${ICONS.satis}</div>
-    <h1>Seyyar Satış</h1><div class="muted small" style="margin-bottom:16px">Satış · Stok · Cari · Kasa</div>
+    <h1>Seyyar Satış</h1><div class="muted small" style="margin-bottom:16px">Toptan satış, tahsilat ve rota</div>
     <div class="seg" id="lm"><button data-m="in" class="on">Giriş yap</button><button data-m="up">Kayıt ol</button></div>
     <label>E-posta</label><input id="le" type="email" inputmode="email" autocomplete="username" value="${esc(lsGet("ss_lastEmail", ""))}">
     <label>Şifre</label><input id="lp" type="password" autocomplete="current-password">
