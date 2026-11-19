@@ -1,7 +1,7 @@
 "use strict";
 /* =================== YÖNLENDİRME =================== */
 let R = { v: "satis", p: {} }; let stack = []; let renderTok = 0;
-const NAV_FULL = [["satis", "Satış"], ["stok", "Ürünler"], ["cari", "Müşteriler"], ["kasa", "Kasa"], ["menu", "Daha"]];
+const NAV_FULL = [["satis", "Satış"], ["stok", "Ürünler"], ["cari", "Müşteriler"], ["menu", "Daha"]];
 const NAV_SIMPLE = [["satis", "Satış"], ["cari", "Müşteriler"], ["menu", "Daha"]];
 const ICON_FOR = { satis: "satis", stok: "stok", cari: "cari", kasa: "kasa", menu: "menu" };
 const TITLES = { satis: "Satış", stok: "Ürünler", cari: "Müşteriler", kasa: "Kasa", rapor: "Raporlar", menu: "Daha", doc: "", urun: "Ürün", caridetay: "Müşteri / Tedarikçi", belgeler: "Belgeler", sayim: "Stok sayımı", ayarlar: "Ayarlar", kullanicilar: "Kullanıcılar", kuyruk: "Bekleyen işlemler", yedek: "Yedek & dışa aktar", toplufiyat: "Toplu fiyat güncelleme", gunsonu: "Gün sonu" };
@@ -966,6 +966,7 @@ function vMenu() {
    ${qn ? `<div class="card list">${item("kuyruk", `<span class="warnc">${qn} işlem gönderilmeyi bekliyor</span>`, "İnternet gelince otomatik gönderilir")}</div>` : ""}
    <div class="card list">
     ${!simple && isAdmin() ? item("rapor", "Raporlar", "Kâr, en çok satanlar, müşteriler") : ""}
+    ${!simple ? item("kasa", "Kasa", "Nakit, kart, banka; gider ve gelir") : ""}
     ${item("gunsonu", "Gün sonu", "Kasa sayımı ve günlük özet")}
     ${item("belgeler", "Satış geçmişi", "Fişler, faturalar, tekrar yazdır")}
     ${item("satis_iade", "İade al", "Müşteriden ürün iadesi")}
