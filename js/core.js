@@ -2,7 +2,7 @@
 /* =================== AYAR =================== */
 const SUPA_URL = "https://kzwmlhncpxylqvveohsb.supabase.co";
 const SUPA_KEY = "sb_publishable_mTWX0XH4IS7hbr4ZhUA0xg_rQez37iM";
-const APP_VER = "2.8";
+const APP_VER = "2.9";
 /* =================== TEMA =================== */
 const THEMES = { auto: "Otomatik", light: "Açık", dark: "Koyu" };
 const THEME_ICON = {
@@ -15,7 +15,7 @@ function applyTheme(t) {
   try { localStorage.setItem("ss_theme", t); } catch (e) { }
   if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
   const dark = t === "dark" || (t === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
-  const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = dark ? "#1d2a8a" : "#2340d9";
+  const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = dark ? "#0e0f19" : "#f3f3f7";
   const b = document.getElementById("themeBtn"); if (b) { b.innerHTML = THEME_ICON[t]; b.title = "Tema: " + THEMES[t]; }
 }
 function cycleTheme() { const o = ["auto", "light", "dark"]; const n = o[(o.indexOf(getTheme()) + 1) % 3]; applyTheme(n); toast("Tema: " + THEMES[n]); }

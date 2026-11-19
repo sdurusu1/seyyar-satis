@@ -20,9 +20,10 @@ function render() {
   const cur = stack.length ? stack[0].v : R.v;
   $("#nav").innerHTML = navList().map(([k, t]) => `<button data-v="${k}" class="${cur === k ? "act" : ""}">${ICONS[ICON_FOR[k]]}<span>${t}</span></button>`).join("");
   $$("#nav button").forEach(b => b.onclick = () => go(b.dataset.v));
-  $("#backBtn").style.display = stack.length ? "" : "none";
+  $("#backBtn").style.display = stack.length ? "" : "none"; document.body.classList.toggle("deep", !!stack.length);
   $("#ttl").textContent = R.v === "doc" ? DOC_LABEL[R.p.type] : (TITLES[R.v] || "");
-  renderTok++;
+  const sub = $("#sub"); if (sub) sub.textContent = stack.length ? "" : R.v === "satis" ? new Date().toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" }) : R.v === "cari" ? `${D.parties.filter(c => c.active !== false).length} kayıt` : R.v === "stok" ? `${D.products.filter(p => p.active !== false).length} ürün` : (S().firm || "");
+  renderTok++; document.body.classList.remove("haspay");
   const fn = VIEWS[R.v]; if (fn) fn(R.p); updPrnPill(); setOnline(online);
 }
 function refreshView() { if (R.v === "doc" || R.v === "satis") return; render(); }
@@ -91,6 +92,9 @@ const isBuy = t => t === "alis" || t === "alis_iade";
 function custPrice(partyId, p) { const x = partyId && (D.pprice || {})[partyId + "|" + p.id]; return x && (x.base === null || Math.abs(x.base - (+p.retail || 0)) < 0.005) ? x.price : null; }
 function priceFor(p, type, mode, partyId) { if (isBuy(type)) return +p.cost || 0; if (type === "satis") { const cp = custPrice(partyId, p); if (cp !== null) return cp; } return +p.retail || 0; }
 const koliPref = lsGet("ss_koli", {});
+// Renkli baş harf rozeti: aynı isim hep aynı şeker rengini alır
+const CANDY = 6;
+function avatar(name, cls = "", key) { const s = String(name || "?").trim(); let h = 0; for (const ch of String(key || s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; const w = s.split(/\s+/).filter(Boolean); const ini = (w.length > 1 ? w[0][0] + w[1][0] : s.slice(0, 2)).toLocaleUpperCase("tr"); return `<span class="av c${h % CANDY} ${cls}" aria-hidden="true">${esc(ini)}</span>`; }
 function cartTotals(c) { const gross = r2(c.items.reduce((a, i) => a + r2(i.qty * i.price), 0)); const disc = Math.min(r2(pnum(c.discount)), gross); return { gross, disc, total: r2(gross - disc) }; }
 function searchProducts(q, includePassive) {
   q = q.trim(); if (!q) return [];
@@ -162,13 +166,13 @@ function vDoc(p) {
       <div class="searchbox grow"><input id="q" data-type="${type}" class="bigin" placeholder="Barkod okut ya da ürün ara…" autocomplete="off" enterkeyhint="search" value="${esc(hadQ)}"><div class="results" id="res" style="display:none"></div></div>
       <button class="btn iconbtn big1" id="camBtn" title="Kamera ile barkod oku">${ICONS.cam}</button>
     </div>
-    ${showGrid ? `<div class="qgrid">${qp.map(x => { const inCart = c.items.find(i => i.pid === x.id); return `<button class="qt ${inCart ? "in" : ""}" data-qp="${x.id}"><span class="qn">${esc(x.name)}</span><span class="qp num">${tl(priceFor(x, type, c.mode, c.partyId))}</span>${inCart ? `<span class="qc">${qf(inCart.qty)}</span>` : ""}</button>`; }).join("")}${isAdmin() ? `<button class="qt qe" id="qEdit">★<span class="qn">Düzenle</span></button>` : ""}</div>` : ""}
+    ${showGrid ? `<div class="qgrid">${qp.map(x => { const inCart = c.items.find(i => i.pid === x.id); return `<button class="qt ${inCart ? "in" : ""}" data-qp="${x.id}">${avatar(x.name, "sq", x.category)}<span class="qn">${esc(x.name)}</span><span class="qp num">${tl(priceFor(x, type, c.mode, c.partyId))}</span>${inCart ? `<span class="qc">${qf(inCart.qty)}</span>` : ""}</button>`; }).join("")}${isAdmin() ? `<button class="qt qe" id="qEdit">★<span class="qn">Düzenle</span></button>` : ""}</div>` : ""}
     ${c.items.length ? `<div class="card">
       <div class="row"><h3 class="grow" style="margin:0">Sepet <span class="muted small">(${qf(c.items.reduce((a, i) => a + i.qty, 0))} ürün)</span></h3><button class="btn sm bad" id="clr">Temizle</button></div>
       <div class="list" id="cartList">
       ${c.items.map((i, ix) => { const pr = prodById(i.pid); const avail = type === "satis" && pr ? (vehId() ? vehQty(vehId(), pr.id) : pr.stock) : null; const low = avail !== null && avail - i.qty < 0; const special = type === "satis" && pr && Math.abs(i.price - (+pr.retail || 0)) > 0.004; const canK = pr && +pr.pack_qty > 1; return `
         <div class="it">
-          <div class="grow"><div class="t">${esc(i.name)}</div><div class="small muted num"><span data-price="${ix}" class="lnk">${tl(i.price)}</span>${special ? ' <span class="tag w">özel</span>' : ""} × ${qf(i.qty)}${i.pk ? ` <span class="muted">(${qf(r2(i.qty / i.pk))} koli)</span>` : ""} = <b style="color:var(--ink)">${tl(i.qty * i.price)}</b>${low ? ` · <span class="danger">${vehId() ? "araçta" : "stok"} ${qf(avail)}</span>` : ""}</div>
+          ${avatar(i.name, "sq sm", pr && pr.category)}<div class="grow"><div class="t">${esc(i.name)}</div><div class="small muted num"><span data-price="${ix}" class="lnk">${tl(i.price)}</span>${special ? ' <span class="tag w">özel</span>' : ""} × ${qf(i.qty)}${i.pk ? ` <span class="muted">(${qf(r2(i.qty / i.pk))} koli)</span>` : ""} = <b style="color:var(--ink)">${tl(i.qty * i.price)}</b>${low ? ` · <span class="danger">${vehId() ? "araçta" : "stok"} ${qf(avail)}</span>` : ""}</div>
           ${canK ? `<div class="seg mini" style="margin-top:4px;width:120px"><button data-pk="${ix}" data-v="0" class="${i.pk ? "" : "on"}">Adet</button><button data-pk="${ix}" data-v="1" class="${i.pk ? "on" : ""}">Koli ${qf(pr.pack_qty)}</button></div>` : ""}</div>
           <div class="qty"><button data-dec="${ix}">−</button><input inputmode="decimal" data-q="${ix}" value="${qf(i.pk ? r2(i.qty / i.pk) : i.qty)}"><button data-inc="${ix}">+</button></div>
         </div>`; }).join("")}
@@ -192,7 +196,9 @@ function vDoc(p) {
       <button class="btn pri block big" id="finish" ${c.items.length ? "" : "disabled"}>${type === "satis" ? (c.pay === "nakit" ? "Ödeme al" : "Satışı tamamla") : "Kaydet"}</button>
     </div>
    </div>
-  </div>`;
+  </div>
+  ${c.items.length ? `<div class="paybar"><div class="grow"><div class="pbk">${qf(c.items.reduce((a, i) => a + i.qty, 0))} ürün · ${({ nakit: "Nakit", kart: "Kart", veresiye: buy || type === "satis_iade" ? "Hesaba" : "Veresiye", havale: "Havale" })[c.pay] || ""}</div><div class="pbv num">${tl(t.total)}</div></div><button id="finish2">${type === "satis" ? (c.pay === "nakit" ? "Ödeme al" : "Tamamla") : "Kaydet"}</button></div>` : ""}`;
+  document.body.classList.toggle("haspay", !!c.items.length);
   const rerender = () => vDoc(p);
   const q = $("#q"), res = $("#res");
   const showRes = () => {
@@ -243,6 +249,7 @@ function vDoc(p) {
     if (type === "satis" && c.pay === "nakit") return cashSheet(t.total, run);
     run();
   };
+  const f2 = $("#finish2"); if (f2) f2.onclick = () => $("#finish").click();
 }
 function applyPartyDefaults(c, type) {
   const pp = partyById(c.partyId); if (!pp || isBuy(type)) return;
@@ -413,7 +420,7 @@ function vStok() {
    </div>
    <div class="card list">
     ${shown.length ? shown.map(p => `<div class="it click" data-p="${p.id}">
-      <div class="grow"><div class="t">${esc(p.name)}</div><div class="small muted">${esc(p.category || p.barcode || "")}</div></div>
+      ${avatar(p.name, "sq", p.category)}<div class="grow"><div class="t">${esc(p.name)}</div><div class="small muted">${esc(p.category || p.barcode || "")}</div></div>
       <div class="right"><div class="num"><b>${tl(p.retail)}</b></div><span class="tag ${p.stock <= 0 ? "b" : p.stock <= (p.min_stock || 0) ? "w" : ""}">${qf(p.stock)} ${esc(p.unit || "")}</span></div>
     </div>`).join("") : `<div class="empty">${D.products.length ? "Ürün bulunamadı." : "Henüz ürün yok.<br><br>"}${D.products.length ? "" : `<button class="btn pri" id="firstAdd">${ICONS.plus} İlk ürünü ekle</button>`}</div>`}
     ${list.length > 300 ? `<div class="empty small">İlk 300 ürün gösteriliyor, aramayı daraltın.</div>` : ""}
@@ -578,7 +585,7 @@ function vCari() {
    </div>
    <div class="row" style="gap:6px;margin-bottom:10px"><button class="btn sm" id="cexp">${ICONS.dl} Excel</button></div>
    <div class="card list">${list.length ? list.slice(0, 300).map(c => { const b = balance(c.id); return `<div class="it click" data-c="${c.id}">
-      <div class="grow"><div class="t">${esc(c.name)}</div><div class="small muted">${c.kind === "tedarikci" ? '<span class="tag">Tedarikçi</span> ' : c.kind === "her_ikisi" ? '<span class="tag">Müş.+Ted.</span> ' : ""}${esc([c.district, c.city].filter(Boolean).join(", ") || c.phone || "")}${isCust(c) && overDays(c.id) ? ` <span class="tag w">${daysSince(c.id) === null ? "hiç uğranmadı" : daysSince(c.id) + " gün"}</span>` : ""}</div></div>
+      ${avatar(c.name)}<div class="grow"><div class="t">${esc(c.name)}</div><div class="small muted">${c.kind === "tedarikci" ? '<span class="tag">Tedarikçi</span> ' : c.kind === "her_ikisi" ? '<span class="tag">Müş.+Ted.</span> ' : ""}${esc([c.district, c.city].filter(Boolean).join(", ") || c.phone || "")}${isCust(c) && overDays(c.id) ? ` <span class="tag w">${daysSince(c.id) === null ? "hiç uğranmadı" : daysSince(c.id) + " gün"}</span>` : ""}</div></div>
       <div class="right num ${b > 0 ? "danger" : b < 0 ? "okc" : "muted"}"><b>${tl(Math.abs(b))}</b><div class="small muted">${b > 0.009 ? "borçlu" : b < -0.009 ? "alacaklı" : ""}</div></div></div>`; }).join("") : '<div class="empty">Kayıt yok.</div>'}</div>`;
   const inp = $("#cq"); inp.oninput = debounce(() => { cq = inp.value; const pos = inp.selectionStart; vCari(); const n = $("#cq"); n.focus(); n.setSelectionRange(pos, pos); }, 250);
   $$("[data-k]").forEach(b => b.onclick = () => { ckind = b.dataset.k; vCari(); });
