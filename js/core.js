@@ -2,7 +2,7 @@
 /* =================== AYAR =================== */
 const SUPA_URL = "https://kzwmlhncpxylqvveohsb.supabase.co";
 const SUPA_KEY = "sb_publishable_mTWX0XH4IS7hbr4ZhUA0xg_rQez37iM";
-const APP_VER = "2.6";
+const APP_VER = "2.7";
 /* =================== TEMA =================== */
 const THEMES = { auto: "Otomatik", light: "Açık", dark: "Koyu" };
 const THEME_ICON = {
@@ -120,11 +120,11 @@ function defaultSettings() {
     serEarsiv: "EAR", serEfatura: "EFT", efaturaProfile: "TICARIFATURA", endpoint: "", token: "",
     defaultMode: "perakende", allowNegative: true, expenseCats: ["Yakıt", "Yemek", "Araç bakım", "Kira", "Fatura (elektrik/su/tel.)", "Vergi/SGK", "Maaş", "Kırtasiye/Ambalaj", "Diğer"],
     categories: ["Oyuncak", "Şekerleme", "Hediyelik"], staffSeeCost: false,
-    invoicing: false, staffSimple: true, quick: [], setupDone: false
+    invoicing: false, staffSimple: true, quick: [], setupDone: false, visitDays: 30, vehicleId: ""
   };
 }
 // cihaza özel ayarlar (yazıcı)
-const LOCAL_KEYS = ["paper", "charset", "codepage", "printMode", "copies", "autoPrint"];
+const LOCAL_KEYS = ["paper", "charset", "codepage", "printMode", "copies", "autoPrint", "vehicleId"];
 const LS = () => Object.assign({}, lsGet("ss_local", {}));
 function setting(k) { const l = LS(); return (LOCAL_KEYS.includes(k) && l[k] !== undefined) ? l[k] : S()[k]; }
 function setLocal(k, v) { const l = LS(); l[k] = v; lsSet("ss_local", l); }
@@ -152,20 +152,28 @@ async function loadAll(silent) {
     D.role = role;
     if (!role) { D.loadedAt = null; saveCache(); return "noaccess"; }
     const since = addDays(new Date(), -45).toISOString();
-    const [products, parties, accounts, settings, pb, ab, docs, users] = await Promise.all([
+    const t0 = startOfDay(new Date()).toISOString();
+    const [products, parties, accounts, settings, pb, ab, docs, users, pprices, vehicles, vstock, visits] = await Promise.all([
       API.getAll("products", "select=*&order=name.asc"),
       API.getAll("parties", "select=*&order=name.asc"),
       API.get("accounts?select=*&order=sort.asc"),
       API.get("settings?select=data&id=eq.1"),
-      API.getAll("party_balances", "select=id,balance,last_move"),
+      API.getAll("party_balances", "select=id,balance,last_move,last_visit"),
       API.get("account_balances?select=id,balance"),
       API.get(`documents?select=*,document_lines(*)&date=gte.${encodeURIComponent(since)}&order=date.desc&limit=400`),
-      API.get("app_users?select=*&order=created_at.asc")
+      API.get("app_users?select=*&order=created_at.asc"),
+      API.getAll("party_prices", "select=party_id,product_id,price,base").catch(() => []),
+      API.get("vehicles?select=*&order=sort.asc,name.asc").catch(() => []),
+      API.getAll("vehicle_stock", "select=vehicle_id,product_id,qty").catch(() => []),
+      API.get(`visits?select=*&date=gte.${encodeURIComponent(t0)}&order=date.desc`).catch(() => [])
     ]);
     D.products = products.map(numify); D.parties = parties.map(numify); D.accounts = accounts;
     D.settings = (settings[0] && settings[0].data) || {};
     D.pbal = {}; pb.forEach(x => D.pbal[x.id] = +x.balance);
     D.plast = {}; pb.forEach(x => D.plast[x.id] = x.last_move);
+    D.pprice = {}; pprices.forEach(x => D.pprice[x.party_id + "|" + x.product_id] = { price: +x.price, base: x.base === null ? null : +x.base });
+    D.vehicles = vehicles; D.vstock = {}; vstock.forEach(x => { (D.vstock[x.vehicle_id] = D.vstock[x.vehicle_id] || {})[x.product_id] = +x.qty; });
+    D.visits = visits;
     D.abal = {}; ab.forEach(x => D.abal[x.id] = +x.balance);
     const pend = D.docs.filter(d => d.pending);
     D.docs = pend.concat(docs.map(normDoc));

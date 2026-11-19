@@ -4,7 +4,7 @@ let R = { v: "satis", p: {} }; let stack = []; let renderTok = 0;
 const NAV_FULL = [["satis", "Satış"], ["stok", "Ürünler"], ["cari", "Müşteriler"], ["menu", "Daha"]];
 const NAV_SIMPLE = [["satis", "Satış"], ["cari", "Müşteriler"], ["menu", "Daha"]];
 const ICON_FOR = { satis: "satis", stok: "stok", cari: "cari", kasa: "kasa", menu: "menu" };
-const TITLES = { satis: "Satış", stok: "Ürünler", cari: "Müşteriler", kasa: "Kasa", rapor: "Raporlar", menu: "Daha", doc: "", urun: "Ürün", caridetay: "Müşteri / Tedarikçi", belgeler: "Belgeler", sayim: "Stok sayımı", ayarlar: "Ayarlar", kullanicilar: "Kullanıcılar", kuyruk: "Bekleyen işlemler", yedek: "Yedek & dışa aktar", toplufiyat: "Toplu fiyat güncelleme", gunsonu: "Gün sonu" };
+const TITLES = { satis: "Satış", stok: "Ürünler", cari: "Müşteriler", kasa: "Kasa", rapor: "Raporlar", menu: "Daha", doc: "", urun: "Ürün", caridetay: "Müşteri / Tedarikçi", belgeler: "Belgeler", sayim: "Stok sayımı", ayarlar: "Ayarlar", kullanicilar: "Kullanıcılar", kuyruk: "Bekleyen işlemler", yedek: "Yedek & dışa aktar", toplufiyat: "Toplu fiyat güncelleme", gunsonu: "Gün sonu", arac: "Araç stoğu", aracis: "Araç" };
 // Basit mod: personel için zorunlu olabilir (ayar), yönetici kendi cihazında seçer
 function isSimple() { if (!isAdmin() && S().staffSimple !== false) return true; return lsGet("ss_mode", "gelismis") === "basit"; }
 function navList() { return isSimple() ? NAV_SIMPLE : NAV_FULL; }
@@ -87,7 +87,10 @@ function newCart(type) { return { items: [], partyId: "", mode: type.startsWith(
 function cartOf(type) { if (!carts[type]) carts[type] = newCart(type); return carts[type]; }
 const saveCarts = debounce(() => lsSet("ss_carts", carts), 300);
 const isBuy = t => t === "alis" || t === "alis_iade";
-function priceFor(p, type, mode) { if (isBuy(type)) return +p.cost || 0; return +p.retail || 0; }
+// Müşteriye özel son fiyat: ürünün liste fiyatı o satıştan beri değişmediyse geçerli
+function custPrice(partyId, p) { const x = partyId && (D.pprice || {})[partyId + "|" + p.id]; return x && (x.base === null || Math.abs(x.base - (+p.retail || 0)) < 0.005) ? x.price : null; }
+function priceFor(p, type, mode, partyId) { if (isBuy(type)) return +p.cost || 0; if (type === "satis") { const cp = custPrice(partyId, p); if (cp !== null) return cp; } return +p.retail || 0; }
+const koliPref = lsGet("ss_koli", {});
 function cartTotals(c) { const gross = r2(c.items.reduce((a, i) => a + r2(i.qty * i.price), 0)); const disc = Math.min(r2(pnum(c.discount)), gross); return { gross, disc, total: r2(gross - disc) }; }
 function searchProducts(q, includePassive) {
   q = q.trim(); if (!q) return [];
@@ -97,7 +100,8 @@ function searchProducts(q, includePassive) {
 }
 function addLine(type, p, qty = 1) {
   const c = cartOf(type); const ex = c.items.find(i => i.pid === p.id);
-  if (ex) ex.qty = r2(ex.qty + qty); else c.items.unshift({ pid: p.id, name: p.name, barcode: p.barcode || "", unit: p.unit || "Adet", vat: +p.vat, price: priceFor(p, type, c.mode), qty });
+  if (ex) ex.qty = r2(ex.qty + qty * (ex.pk || 1));
+  else { const pk = +p.pack_qty > 1 && koliPref[p.id] ? +p.pack_qty : 0; c.items.unshift({ pid: p.id, name: p.name, barcode: p.barcode || "", unit: p.unit || "Adet", vat: +p.vat, price: priceFor(p, type, c.mode, c.partyId), qty: r2(qty * (pk || 1)), pk }); }
   if (navigator.vibrate) try { navigator.vibrate(30); } catch (e) { }
   saveCarts();
 }
@@ -158,14 +162,15 @@ function vDoc(p) {
       <div class="searchbox grow"><input id="q" data-type="${type}" class="bigin" placeholder="Barkod okut ya da ürün ara…" autocomplete="off" enterkeyhint="search" value="${esc(hadQ)}"><div class="results" id="res" style="display:none"></div></div>
       <button class="btn iconbtn big1" id="camBtn" title="Kamera ile barkod oku">${ICONS.cam}</button>
     </div>
-    ${showGrid ? `<div class="qgrid">${qp.map(x => { const inCart = c.items.find(i => i.pid === x.id); return `<button class="qt ${inCart ? "in" : ""}" data-qp="${x.id}"><span class="qn">${esc(x.name)}</span><span class="qp num">${tl(priceFor(x, type, c.mode))}</span>${inCart ? `<span class="qc">${qf(inCart.qty)}</span>` : ""}</button>`; }).join("")}${isAdmin() ? `<button class="qt qe" id="qEdit">★<span class="qn">Düzenle</span></button>` : ""}</div>` : ""}
+    ${showGrid ? `<div class="qgrid">${qp.map(x => { const inCart = c.items.find(i => i.pid === x.id); return `<button class="qt ${inCart ? "in" : ""}" data-qp="${x.id}"><span class="qn">${esc(x.name)}</span><span class="qp num">${tl(priceFor(x, type, c.mode, c.partyId))}</span>${inCart ? `<span class="qc">${qf(inCart.qty)}</span>` : ""}</button>`; }).join("")}${isAdmin() ? `<button class="qt qe" id="qEdit">★<span class="qn">Düzenle</span></button>` : ""}</div>` : ""}
     ${c.items.length ? `<div class="card">
       <div class="row"><h3 class="grow" style="margin:0">Sepet <span class="muted small">(${qf(c.items.reduce((a, i) => a + i.qty, 0))} ürün)</span></h3><button class="btn sm bad" id="clr">Temizle</button></div>
       <div class="list" id="cartList">
-      ${c.items.map((i, ix) => { const pr = prodById(i.pid); const low = type === "satis" && pr && pr.stock - i.qty < 0; return `
+      ${c.items.map((i, ix) => { const pr = prodById(i.pid); const avail = type === "satis" && pr ? (vehId() ? vehQty(vehId(), pr.id) : pr.stock) : null; const low = avail !== null && avail - i.qty < 0; const special = type === "satis" && pr && Math.abs(i.price - (+pr.retail || 0)) > 0.004; const canK = pr && +pr.pack_qty > 1; return `
         <div class="it">
-          <div class="grow"><div class="t">${esc(i.name)}</div><div class="small muted num"><span data-price="${ix}" class="lnk">${tl(i.price)}</span> × ${qf(i.qty)} = <b style="color:var(--ink)">${tl(i.qty * i.price)}</b>${low ? ' · <span class="danger">stok ' + qf(pr.stock) + "</span>" : ""}</div></div>
-          <div class="qty"><button data-dec="${ix}">−</button><input inputmode="decimal" data-q="${ix}" value="${qf(i.qty)}"><button data-inc="${ix}">+</button></div>
+          <div class="grow"><div class="t">${esc(i.name)}</div><div class="small muted num"><span data-price="${ix}" class="lnk">${tl(i.price)}</span>${special ? ' <span class="tag w">özel</span>' : ""} × ${qf(i.qty)}${i.pk ? ` <span class="muted">(${qf(r2(i.qty / i.pk))} koli)</span>` : ""} = <b style="color:var(--ink)">${tl(i.qty * i.price)}</b>${low ? ` · <span class="danger">${vehId() ? "araçta" : "stok"} ${qf(avail)}</span>` : ""}</div>
+          ${canK ? `<div class="seg mini" style="margin-top:4px;width:120px"><button data-pk="${ix}" data-v="0" class="${i.pk ? "" : "on"}">Adet</button><button data-pk="${ix}" data-v="1" class="${i.pk ? "on" : ""}">Koli ${qf(pr.pack_qty)}</button></div>` : ""}</div>
+          <div class="qty"><button data-dec="${ix}">−</button><input inputmode="decimal" data-q="${ix}" value="${qf(i.pk ? r2(i.qty / i.pk) : i.qty)}"><button data-inc="${ix}">+</button></div>
         </div>`; }).join("")}
       </div></div>` : (showGrid ? "" : `<div class="card"><div class="empty">${buy ? "Tedarikçiden gelen ürünleri okutun veya arayın." : "Ürün okutun veya arayın."}</div></div>`)}
    </div>
@@ -219,9 +224,10 @@ function vDoc(p) {
   const hv = $("#havale"); if (hv) hv.onchange = () => { c.pay = hv.checked ? "havale" : "nakit"; saveCarts(); rerender(); };
   const ft = $("#fatura"); if (ft) ft.onchange = () => { c.docKind = ft.checked ? "fatura" : "fis"; saveCarts(); rerender(); };
   const clr = $("#clr"); if (clr) clr.onclick = async () => { if (await ask("Sepet temizlensin mi?", "Temizle", true)) { carts[type] = newCart(type); saveCarts(); rerender(); } };
-  $$("[data-inc]").forEach(b => b.onclick = () => { c.items[b.dataset.inc].qty = r2(c.items[b.dataset.inc].qty + 1); saveCarts(); rerender(); });
-  $$("[data-dec]").forEach(b => b.onclick = () => { const i = c.items[b.dataset.dec]; i.qty = r2(i.qty - 1); if (i.qty <= 0) c.items.splice(b.dataset.dec, 1); saveCarts(); rerender(); });
-  $$("[data-q]").forEach(inp => inp.onchange = () => { const v = pnum(inp.value); if (v <= 0) c.items.splice(inp.dataset.q, 1); else c.items[inp.dataset.q].qty = v; saveCarts(); rerender(); });
+  $$("[data-inc]").forEach(b => b.onclick = () => { const i = c.items[b.dataset.inc]; i.qty = r2(i.qty + (i.pk || 1)); saveCarts(); rerender(); });
+  $$("[data-dec]").forEach(b => b.onclick = () => { const i = c.items[b.dataset.dec]; i.qty = r2(i.qty - (i.pk || 1)); if (i.qty <= 0) c.items.splice(b.dataset.dec, 1); saveCarts(); rerender(); });
+  $$("[data-q]").forEach(inp => inp.onchange = () => { const v = pnum(inp.value); const i = c.items[inp.dataset.q]; if (v <= 0) c.items.splice(inp.dataset.q, 1); else i.qty = r2(v * (i.pk || 1)); saveCarts(); rerender(); });
+  $$("[data-pk]").forEach(b => b.onclick = () => { const i = c.items[b.dataset.pk]; const pr = prodById(i.pid); if (!pr) return; const on = b.dataset.v === "1"; if (on && !i.pk) { i.pk = +pr.pack_qty; i.qty = r2(Math.max(1, Math.round(i.qty / i.pk)) * i.pk); } else if (!on) i.pk = 0; koliPref[pr.id] = on; lsSet("ss_koli", koliPref); saveCarts(); rerender(); });
   $$("[data-price]").forEach(el => el.onclick = async () => { const i = c.items[el.dataset.price]; const v = await prompt2(i.name, "Birim fiyat (KDV dahil)", String(i.price).replace(".", ","), "num"); if (v !== null) { i.price = r2(pnum(v)); saveCarts(); rerender(); } });
   $("#pickParty").onclick = e => { if (e.target.closest("#unParty")) { c.partyId = ""; if (c.pay === "veresiye") c.pay = "nakit";  c.items.forEach(i => { const x = prodById(i.pid); if (x) i.price = priceFor(x, type, c.mode); }); saveCarts(); return rerender(); } pickParty(buy ? "tedarikci" : "musteri", id => { c.partyId = id; applyPartyDefaults(c, type); saveCarts(); rerender(); }); };
   $("#disc").onchange = e => { c.discount = pnum(e.target.value); saveCarts(); rerender(); };
@@ -240,6 +246,8 @@ function vDoc(p) {
 }
 function applyPartyDefaults(c, type) {
   const pp = partyById(c.partyId); if (!pp || isBuy(type)) return;
+  let n = 0; c.items.forEach(i => { const x = prodById(i.pid); if (!x) return; i.price = priceFor(x, type, c.mode, c.partyId); if (custPrice(c.partyId, x) !== null && Math.abs(i.price - x.retail) > 0.004) n++; });
+  if (n) toast(`Bu müşteriye özel ${n} fiyat uygulandı`);
   if (pp.due_days && !c.due) c.due = ymd(addDays(new Date(), pp.due_days));
 }
 /* --- hızlı para alma --- */
@@ -303,12 +311,15 @@ async function finishDoc(type, p) {
   if (type === "satis" && !S().allowNegative) { const low = c.items.find(i => { const pp = prodById(i.pid); return pp && pp.stock < i.qty; }); if (low) throw new Error("Yetersiz stok: " + low.name); }
   const id = uuid();
   const pdoc = { id, type, doc_kind: kind, date: new Date().toISOString(), party_id: c.partyId || null, price_mode: c.mode, discount: t.disc, pay_method: c.pay, paid: c.pay === "veresiye" ? pnum(c.paid) : null, due_date: c.pay === "veresiye" && c.due ? c.due : null, note: c.note || null, supplier_doc_no: c.supDocNo || null, update_cost: c.updateCost, ettn: kind !== "fis" ? uuid() : null, ref_doc_id: c.refDocId || null };
-  const lines = c.items.map(i => ({ product_id: i.pid, name: i.name, barcode: i.barcode, unit: i.unit, qty: i.qty, price: i.price, vat: i.vat }));
+  const lines = c.items.map(i => ({ product_id: i.pid, name: i.pk && Math.abs(i.qty / i.pk - Math.round(i.qty / i.pk)) < 1e-9 ? `${i.name} (${qf(r2(i.qty / i.pk))} koli)` : i.name, barcode: i.barcode, unit: i.unit, qty: i.qty, price: i.price, vat: i.vat }));
+  const veh = (type === "satis" || type === "satis_iade") ? vehId() : ""; if (veh) pdoc.vehicle_id = veh;
   const doc = buildLocalDoc(pdoc, lines);
   const r = await rpcNowOrQueue("save_document", { p_doc: pdoc, p_lines: lines }, `${DOC_LABEL[type]} ${tl(doc.total)}`, "docSaved");
   if (r.queued) { doc.pending = true; doc.no = null; } else { doc.no = r.no; }
   if (kind !== "fis") doc.e_status = "taslak";
   D.docs.unshift(doc); applyLocalDoc(doc);
+  if (c.partyId) { (D.plast = D.plast || {})[c.partyId] = new Date().toISOString(); if (type === "satis") { D.pprice = D.pprice || {}; c.items.forEach(i => { const x = prodById(i.pid); if (x) D.pprice[c.partyId + "|" + i.pid] = { price: i.price, base: +x.retail }; }); } }
+  if (veh) { const sg = type === "satis" ? -1 : 1; const vs = (D.vstock = D.vstock || {})[veh] = (D.vstock[veh] || {}); c.items.forEach(i => vs[i.pid] = r2((vs[i.pid] || 0) + sg * i.qty)); }
   carts[type] = newCart(type); if (type === "satis") carts[type].docKind = c.docKind; saveCarts();
   if (!r.queued) loadAll(true);
   if (type === "satis") vDoc(p); else back();
@@ -320,7 +331,7 @@ function docDoneDialog(doc) {
   dialog(`${lg ? `<div class="change"><div class="small">Para üstü</div><div class="big1 num">${tl(lg.change)}</div><div class="small muted">Alınan ${tl(lg.given)}</div></div>` : ""}<h3 class="okc">${doc.pending ? "Kaydedildi (internet gelince gönderilecek)" : "Kaydedildi ✓"}</h3>
     <div class="small muted">${docName(doc)} · ${esc(doc.no || "numara bekliyor")} · <b class="num">${tl(doc.total)}</b>${doc.credit > 0 ? ` · hesaba ${tl(doc.credit)}` : ""}</div>
     ${doc.doc_kind !== "fis" ? `<div class="hint">Fatura “taslak” olarak oluştu. Daha → Satış geçmişi'nden XML'ini alabilir ya da entegratörünüze gönderebilirsiniz.</div>` : ""}
-    <div class="acts"><button class="btn" data-close>Kapat</button>${doc.party && doc.party.phone ? `<a class="btn" target="_blank" rel="noopener" href="${waLink(doc.party.phone, docWaText(doc))}">WhatsApp</a>` : ""}<button class="btn pri" id="pr">${ICONS.print} Yazdır</button></div>`, (d) => { d.querySelector("#pr").onclick = () => printDoc(doc); });
+    <div class="acts"><button class="btn" data-close>Kapat</button>${doc.party && doc.party.phone ? `<a class="btn" target="_blank" rel="noopener" href="${waLink(doc.party.phone, docWaText(doc))}">WhatsApp</a>` : ""}<button class="btn pri" id="pr">${ICONS.print} Yazdır</button></div>${doc.party_id && partyById(doc.party_id) && !partyById(doc.party_id).lat && doc.type === "satis" ? `<button class="btn block" id="dloc" style="margin-top:8px">📍 Bu marketin konumunu kaydet</button>` : ""}`, (d, close) => { d.querySelector("#pr").onclick = () => printDoc(doc); const dl = d.querySelector("#dloc"); if (dl) dl.onclick = () => { close(); saveLocation(partyById(doc.party_id)); }; });
 }
 const waNum = p => { let n = String(p).replace(/\D/g, ""); if (n.startsWith("0")) n = "9" + n; else if (n.length === 10) n = "90" + n; return n; };
 const waLink = (phone, text) => `https://wa.me/${waNum(phone)}?text=${encodeURIComponent(text)}`;
@@ -431,7 +442,7 @@ function vUrun(p) {
    <div class="card">
      <div class="row"><div class="grow"><h2 style="margin:0">${esc(pr.name)}</h2><div class="small muted">${esc([pr.barcode, pr.code, pr.category, pr.brand].filter(Boolean).join(" · "))}${pr.active === false ? ' · <span class="danger">PASİF</span>' : ""}</div></div><button class="btn sm" id="ed">Düzenle</button></div>
      <div class="stats" style="margin-top:12px">
-       <div class="stat"><div class="k">Stok</div><div class="v ${pr.stock <= 0 ? "danger" : pr.stock <= pr.min_stock ? "warnc" : ""}">${qf(pr.stock)} <span class="small">${esc(pr.unit)}</span></div>${pr.min_stock ? `<div class="small muted">kritik: ${qf(pr.min_stock)}</div>` : ""}</div>
+       <div class="stat"><div class="k">Stok</div><div class="v ${pr.stock <= 0 ? "danger" : pr.stock <= pr.min_stock ? "warnc" : ""}">${qf(pr.stock)} <span class="small">${esc(pr.unit)}</span></div>${pr.min_stock ? `<div class="small muted">kritik: ${qf(pr.min_stock)}</div>` : ""}${(D.vehicles || []).some(x => vehQty(x.id, pr.id)) ? `<div class="small muted">Depo ${qf(depoQty(pr))}${(D.vehicles || []).filter(x => vehQty(x.id, pr.id)).map(x => ` · ${esc(x.name)} ${qf(vehQty(x.id, pr.id))}`).join("")}</div>` : ""}</div>
        <div class="stat"><div class="k">Satış fiyatı</div><div class="v num">${tl(pr.retail)}</div></div>
        ${canSeeCost() ? `<div class="stat"><div class="k">Alış · marj</div><div class="v num" style="font-size:17px">${tl(pr.cost)} <span class="small muted">%${pr.retail ? ((pr.retail - pr.cost) / pr.retail * 100).toFixed(0) : 0}</span></div></div>` : ""}
        <div class="stat"><div class="k">KDV · Tedarikçi</div><div class="v" style="font-size:15px">%${pr.vat} · ${esc(sup ? sup.name : "—")}</div></div>
@@ -445,7 +456,7 @@ function vUrun(p) {
   $$("[data-a]").forEach(b => b.onclick = () => stockAdjustDialog(pr, b.dataset.a, () => vUrun(p)));
   $("#sell").onclick = () => { addLine("satis", pr); go("satis"); };
   $("#buy").onclick = () => { addLine("alis", pr); go("doc", { type: "alis" }); };
-  const MT = { satis: "Satış", alis: "Alış", satis_iade: "Satış iade", alis_iade: "Alış iade", sayim: "Sayım", fire: "Fire", giris: "Giriş", cikis: "Çıkış", acilis: "Açılış", iptal: "İptal" };
+  const MT = { satis: "Satış", alis: "Alış", satis_iade: "Satış iade", alis_iade: "Alış iade", sayim: "Sayım", fire: "Fire", giris: "Giriş", cikis: "Çıkış", acilis: "Açılış", iptal: "İptal", arac_sayim: "Araç sayım farkı" };
   API.get(`stock_moves?select=*&product_id=eq.${pr.id}&order=date.desc&limit=200`).then(rows => {
     if (tok !== renderTok) return;
     $("#moves").innerHTML = rows.length ? rows.map(m => `<div class="it"><div class="grow"><div class="small"><b>${MT[m.type] || m.type}</b> · ${fdt(m.date)}</div><div class="small muted">${esc(m.note || "")}</div></div><div class="right num"><div class="${+m.qty < 0 ? "danger" : "okc"}">${+m.qty > 0 ? "+" : ""}${qf(m.qty)}</div><div class="small muted">${m.balance !== null ? qf(m.balance) : ""}</div></div></div>`).join("") : '<div class="empty">Hareket yok.</div>';
@@ -545,26 +556,33 @@ function vTopluFiyat() {
 
 /* =================== CARİ =================== */
 let cq = "", ckind = "", cflt = "", ccity = "";
+let cmode = lsGet("ss_cmode", "liste");
+function cariHead() { return `<div class="seg big" id="cmSeg" style="margin-bottom:12px">${[["liste", "Liste"], ["rota", "Rota"], ["yakin", "Yakınımda"]].map(([k, t]) => `<button data-cm="${k}" class="${cmode === k ? "on" : ""}">${t}</button>`).join("")}</div>`; }
+function bindCariHead() { $$("[data-cm]").forEach(b => b.onclick = () => { cmode = b.dataset.cm; lsSet("ss_cmode", cmode); vCari(); }); }
 function vCari() {
+  if (cmode === "rota") return vRota(cariHead());
+  if (cmode === "yakin") return vYakin(cariHead());
   const f = fold(cq);
   let list = D.parties.filter(c => (cflt === "pasif" ? c.active === false : c.active !== false) && (!ckind || c.kind === ckind || c.kind === "her_ikisi") && (!ccity || [c.city, c.district].filter(Boolean).join(" / ") === ccity || c.city === ccity) && (!f || fold(c.name + " " + (c.phone || "") + " " + (c.vkn || "")).includes(f)));
   if (cflt === "borclu") list = list.filter(c => balance(c.id) > 0.009);
   if (cflt === "alacakli") list = list.filter(c => balance(c.id) < -0.009);
-  list.sort(cflt ? (a, b) => Math.abs(balance(b.id)) - Math.abs(balance(a.id)) : (a, b) => a.name.localeCompare(b.name, "tr"));
+  if (cflt === "ugranmayan") list = list.filter(c => isCust(c) && overDays(c.id));
+  const ugN = D.parties.filter(c => c.active !== false && isCust(c) && overDays(c.id)).length;
+  list.sort(cflt === "ugranmayan" ? (a, b) => (daysSince(b.id) ?? 1e9) - (daysSince(a.id) ?? 1e9) : cflt ? (a, b) => Math.abs(balance(b.id)) - Math.abs(balance(a.id)) : (a, b) => a.name.localeCompare(b.name, "tr"));
   const rec = sum(D.parties, c => Math.max(0, balance(c.id))), pay = sum(D.parties, c => Math.max(0, -balance(c.id)));
-  $("#app").innerHTML = `
+  $("#app").innerHTML = cariHead() + `
    <div class="stats"><div class="stat clickable" data-f="borclu"><div class="k">Toplam alacak (bize borçlu)</div><div class="v num danger">${tl(rec)}</div></div><div class="stat clickable" data-f="alacakli"><div class="k">Toplam borç (bizim borcumuz)</div><div class="v num okc">${tl(pay)}</div></div></div>
    <div class="card" style="margin-top:12px">
     <div class="row"><input id="cq" class="grow" placeholder="Ad, telefon, VKN ara" value="${esc(cq)}"><button class="btn pri iconbtn" id="cadd">${ICONS.plus}</button></div>
-    <div class="chips" style="margin-top:8px">${[["", "Tümü"], ["musteri", "Müşteriler"], ["tedarikci", "Tedarikçiler"]].map(([k, t]) => `<button class="pill ${ckind === k ? "on" : ""}" data-k="${k}">${t}</button>`).join("")}${(() => { const cs = [...new Set(D.parties.flatMap(c => c.city ? [c.city, ...(c.district ? [c.city + " / " + c.district] : [])] : []))].sort((a, b) => a.localeCompare(b, "tr")); return cs.length ? `<select class="pillsel" id="ccity"><option value="">Tüm bölgeler</option>${cs.map(x => `<option ${x === ccity ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>` : ""; })()}<span class="sep"></span>${[["", "Hepsi"], ["borclu", "Borçlu"], ["alacakli", "Alacaklı"], ["pasif", "Pasif"]].map(([k, t]) => `<button class="pill ${cflt === k ? "on" : ""}" data-f="${k}">${t}</button>`).join("")}</div>
+    <div class="chips" style="margin-top:8px">${[["", "Tümü"], ["musteri", "Müşteriler"], ["tedarikci", "Tedarikçiler"]].map(([k, t]) => `<button class="pill ${ckind === k ? "on" : ""}" data-k="${k}">${t}</button>`).join("")}${(() => { const cs = [...new Set(D.parties.flatMap(c => c.city ? [c.city, ...(c.district ? [c.city + " / " + c.district] : [])] : []))].sort((a, b) => a.localeCompare(b, "tr")); return cs.length ? `<select class="pillsel" id="ccity"><option value="">Tüm bölgeler</option>${cs.map(x => `<option ${x === ccity ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>` : ""; })()}<span class="sep"></span>${[["", "Hepsi"], ["borclu", "Borçlu"], ["alacakli", "Alacaklı"], ["ugranmayan", `Uğranmayan${ugN ? " " + ugN : ""}`], ["pasif", "Pasif"]].map(([k, t]) => `<button class="pill ${cflt === k ? "on" : ""} ${k === "ugranmayan" && ugN ? "warn" : ""}" data-f="${k}">${t}</button>`).join("")}</div>
    </div>
    <div class="row" style="gap:6px;margin-bottom:10px"><button class="btn sm" id="cexp">${ICONS.dl} Excel</button></div>
    <div class="card list">${list.length ? list.slice(0, 300).map(c => { const b = balance(c.id); return `<div class="it click" data-c="${c.id}">
-      <div class="grow"><div class="t">${esc(c.name)}</div><div class="small muted">${c.kind === "tedarikci" ? '<span class="tag">Tedarikçi</span> ' : c.kind === "her_ikisi" ? '<span class="tag">Müş.+Ted.</span> ' : ""}${esc([c.district, c.city].filter(Boolean).join(", ") || c.phone || "")}</div></div>
+      <div class="grow"><div class="t">${esc(c.name)}</div><div class="small muted">${c.kind === "tedarikci" ? '<span class="tag">Tedarikçi</span> ' : c.kind === "her_ikisi" ? '<span class="tag">Müş.+Ted.</span> ' : ""}${esc([c.district, c.city].filter(Boolean).join(", ") || c.phone || "")}${isCust(c) && overDays(c.id) ? ` <span class="tag w">${daysSince(c.id) === null ? "hiç uğranmadı" : daysSince(c.id) + " gün"}</span>` : ""}</div></div>
       <div class="right num ${b > 0 ? "danger" : b < 0 ? "okc" : "muted"}"><b>${tl(Math.abs(b))}</b><div class="small muted">${b > 0.009 ? "borçlu" : b < -0.009 ? "alacaklı" : ""}</div></div></div>`; }).join("") : '<div class="empty">Kayıt yok.</div>'}</div>`;
   const inp = $("#cq"); inp.oninput = debounce(() => { cq = inp.value; const pos = inp.selectionStart; vCari(); const n = $("#cq"); n.focus(); n.setSelectionRange(pos, pos); }, 250);
   $$("[data-k]").forEach(b => b.onclick = () => { ckind = b.dataset.k; vCari(); });
-  $$("[data-f]").forEach(b => b.onclick = () => { cflt = b.dataset.f; vCari(); });
+  $$("[data-f]").forEach(b => b.onclick = () => { cflt = b.dataset.f; vCari(); }); bindCariHead();
   const cc = $("#ccity"); if (cc) cc.onchange = () => { ccity = cc.value; vCari(); };
   $$("[data-c]").forEach(el => el.onclick = () => go("caridetay", { id: el.dataset.c }));
   $("#cadd").onclick = () => partyDialog(null, { kind: ckind || "musteri" });
@@ -624,9 +642,14 @@ function vCariDetay(p) {
     <div class="row"><div class="grow"><h2 style="margin:0">${esc(c.name)}</h2><div class="small muted">${esc([c.phone, c.city].filter(Boolean).join(" · "))}</div></div><button class="btn iconbtn" id="more" title="Diğer işlemler">⋯</button></div>
     <div class="stat" style="margin:12px 0"><div class="k">Bakiye</div><div class="v num ${b > 0 ? "danger" : b < 0 ? "okc" : ""}">${tl(Math.abs(b))} <span class="small muted">${b > 0.009 ? "bize borçlu" : b < -0.009 ? "biz borçluyuz" : "hesap kapalı"}</span></div>${c.credit_limit ? `<div class="small muted">Limit: ${tl(c.credit_limit)} · kalan ${tl(c.credit_limit - b)}</div>` : ""}<div class="small" id="overdue"></div></div>
     <div class="grid2"><button class="btn pri big1" data-k="${isSup ? "odeme" : "tahsilat"}">${isSup ? "Ödeme yap" : "Tahsilat al"}</button><button class="btn big1" id="sell">${isSup ? "Alış yap" : "Satış yap"}</button></div>
+    ${!isSup ? (() => { const s = todayStatus(c.id); return `<div class="grid3" style="margin-top:8px">${c.lat ? `<a class="btn" href="${navUrl(c)}" target="_blank" rel="noopener">📍 Yol tarifi</a>` : `<button class="btn" id="loc">📍 Konumu kaydet</button>`}<button class="btn" id="vis">✓ Uğradım</button><button class="btn" id="nov">✗ Kapalıydı</button></div>
+    <div class="small muted" style="margin-top:6px">Son uğrama: <span class="${overDays(c.id) ? "warnc" : ""}">${agoText(c.id)}</span>${s ? ` · bugün: <span class="${s.k === "yok" ? "danger" : "okc"}">${esc(s.t)}</span>` : ""}${c.district || c.city ? " · " + esc([c.district, c.city].filter(Boolean).join(", ")) : ""}</div>`; })() : ""}
    </div>
    <div class="card"><div class="row"><h3 class="grow" style="margin:0">Hesap hareketleri</h3><select id="per" style="width:auto;min-height:36px;padding:4px 8px"><option value="90">Son 3 ay</option><option value="365">Son 1 yıl</option><option value="0">Tümü</option></select></div><div class="list" id="led" style="margin-top:8px"><div class="empty">Yükleniyor…</div></div></div>`;
   $$("[data-k]").forEach(bt => bt.onclick = () => cashDialog(bt.dataset.k, { party: c }, () => vCariDetay(p)));
+  const lc = $("#loc"); if (lc) lc.onclick = () => saveLocation(c, () => vCariDetay(p));
+  const vi = $("#vis"); if (vi) vi.onclick = () => saveVisit(c, "ziyaret", () => vCariDetay(p));
+  const nv = $("#nov"); if (nv) nv.onclick = () => saveVisit(c, "gidilemedi", () => vCariDetay(p));
   $("#sell").onclick = () => { const t = isSup ? "alis" : "satis"; cartOf(t).partyId = c.id; applyPartyDefaults(cartOf(t), t); saveCarts(); if (t === "satis") go("satis"); else go("doc", { type: t }); };
   $("#more").onclick = () => actionSheet(c.name, [
     { t: isSup ? "Tahsilat al" : "Ödeme yap (para iadesi)", f: () => cashDialog(isSup ? "tahsilat" : "odeme", { party: c }, () => vCariDetay(p)) },
@@ -635,6 +658,7 @@ function vCariDetay(p) {
     c.phone && { t: "WhatsApp ile bakiye hatırlat", f: () => window.open(waLink(c.phone, `Sayın ${c.name}, ${fd(new Date())} itibarıyla ${b >= 0 ? "borç" : "alacak"} bakiyeniz ${tl(Math.abs(b))}'dir. ${S().firm || ""}`), "_blank") },
     c.phone && { t: "Ara", s: c.phone, f: () => { location.href = "tel:" + c.phone; } },
     !isSimple() && { t: "Borç / alacak dekontu", s: "Açılış bakiyesi, düzeltme", f: () => cashDialog("dekont", { party: c }, () => vCariDetay(p)) },
+    !isSup && c.lat && { t: "Konumu güncelle", s: "Şu anki yerim", f: () => saveLocation(c, () => vCariDetay(p)) },
     { t: "Bilgileri düzenle", f: () => partyDialog(c, {}, () => vCariDetay(p)) }
   ]);
   let rows = [];
@@ -716,6 +740,7 @@ function cashDialog(kind, opt = {}, after) {
       await rpcNowOrQueue("save_cash", { p: pl }, T[kind] + " " + tl(amt));
       // yerel güncelle
       if (pid) D.pbal[pid] = r2((D.pbal[pid] || 0) + ((k === "odeme" || k === "borc_dekont") ? amt : -amt));
+      if (pid && (k === "tahsilat" || k === "odeme")) (D.plast = D.plast || {})[pid] = new Date().toISOString();
       if (accId) { const sg = (k === "tahsilat" || k === "gelir" || k === "acilis") ? 1 : -1; D.abal[accId] = r2((D.abal[accId] || 0) + sg * amt); if (kind === "virman") { const a2 = d.querySelector("#acc2").value; D.abal[a2] = r2((D.abal[a2] || 0) + amt); } }
       saveCache(); close(); toast("Kaydedildi");
       if (k === "tahsilat" && pid) { if (await ask("Tahsilat makbuzu yazdırılsın mı?", "Yazdır")) printReceipt(partyById(pid), pl); }
@@ -985,6 +1010,7 @@ function vMenu() {
    <div class="card list">
     ${!simple && isAdmin() ? item("rapor", "Raporlar", "Kâr, en çok satanlar, müşteriler") : ""}
     ${!simple ? item("kasa", "Kasa", "Nakit, kart, banka; gider ve gelir") : ""}
+    ${(D.vehicles || []).length || (isAdmin() && !simple) ? item("arac", "Araç stoğu", vehId() ? "Bu telefon: " + esc((vehById(vehId()) || {}).name || "") : "Yükleme, boşaltma, akşam sayımı") : ""}
     ${item("gunsonu", "Gün sonu", "Kasa sayımı ve günlük özet")}
     ${item("belgeler", "Satış geçmişi", "Fişler, faturalar, tekrar yazdır")}
     ${item("satis_iade", "İade al", "Müşteriden ürün iadesi")}
@@ -1050,6 +1076,12 @@ function vAyarlar() {
       <div class="hint">Türkçe harfler bozuk çıkarsa kod sayfasını 13, 61 veya 29 deneyin ya da “Dönüştür”ü seçin. iPhone/iPad'de “Sistem / PDF” kullanın.</div>
     </details>
   </div>
+  <div class="card"><h2>Araç</h2>
+    <label style="margin-top:0">Bu telefon hangi araçta satış yapıyor?</label>
+    <select id="vehSel"><option value="">Araç yok (depodan satış)</option>${(D.vehicles || []).filter(x => x.active !== false).map(x => `<option value="${x.id}" ${vehId() === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
+    <div class="small muted" style="margin-top:4px">Seçiliyse bu telefondan yapılan satışlar o aracın stoğundan düşer.</div>
+    ${adm ? `<button class="btn block" id="vehEd" style="margin-top:8px">Araçları düzenle</button>` : ""}
+  </div>
   <div class="card"><h2>Firma bilgileri</h2>${adm ? "" : '<div class="small muted">Yalnızca yönetici değiştirebilir.</div>'}
     <div class="grid2">${f("firm", "Firma adı")}${f("phone", "Telefon", "", "tel")}</div>
     <div><label>Adres</label><input data-k="address" value="${esc(s.address)}" ${adm ? "" : "disabled"}></div>
@@ -1069,6 +1101,7 @@ function vAyarlar() {
   <div class="card"><h2>Genel</h2>
     <div class="grid2">
       <div><label style="margin-top:0">Stok eksiye düşebilir</label><select data-k="allowNegative" data-bool="1"><option value="1" ${s.allowNegative ? "selected" : ""}>Evet</option><option value="0" ${!s.allowNegative ? "selected" : ""}>Hayır</option></select></div>
+      <div><label>Uğranmadı uyarısı (gün)</label><input data-k="visitDays" data-num="1" inputmode="numeric" value="${esc(s.visitDays)}"></div>
       <div><label>Personel modu</label><select data-k="staffSimple" data-bool="1"><option value="1" ${s.staffSimple !== false ? "selected" : ""}>Hep basit</option><option value="0" ${s.staffSimple === false ? "selected" : ""}>Kendisi seçsin</option></select></div>
       <div><label>Personel alış fiyatını görsün</label><select data-k="staffSeeCost" data-bool="1"><option value="0" ${!s.staffSeeCost ? "selected" : ""}>Hayır</option><option value="1" ${s.staffSeeCost ? "selected" : ""}>Evet</option></select></div>
     </div>
@@ -1080,9 +1113,11 @@ function vAyarlar() {
   $$("#mdSeg button").forEach(b => b.onclick = () => { lsSet("ss_mode", b.dataset.md); render(); });
   $$("[data-l]").forEach(el => el.onchange = () => { const k = el.dataset.l; let v = el.type === "checkbox" ? el.checked : el.value; if (["codepage", "copies"].includes(k)) v = pnum(v); setLocal(k, v); updPrnPill(); toast("Kaydedildi"); });
   const saveSh = debounce(async () => { try { await saveShared({}); toast("Kaydedildi"); } catch (e) { toast(e.message); } }, 400);
-  $$("[data-k]").forEach(el => el.onchange = () => { const k = el.dataset.k; let v = el.value; if (el.dataset.bool) v = v === "1"; if (el.dataset.list) v = v.split(",").map(x => x.trim()).filter(Boolean); if (k === "vkn") v = v.replace(/\D/g, ""); D.settings = { ...S(), [k]: v }; saveCache(); saveSh(); });
+  $$("[data-k]").forEach(el => el.onchange = () => { const k = el.dataset.k; let v = el.value; if (el.dataset.bool) v = v === "1"; if (el.dataset.list) v = v.split(",").map(x => x.trim()).filter(Boolean); if (el.dataset.num) v = Math.max(1, Math.round(pnum(v)) || 30); if (k === "vkn") v = v.replace(/\D/g, ""); D.settings = { ...S(), [k]: v }; saveCache(); saveSh(); });
   const io = $("#invOn"); if (io) io.onchange = async () => { await saveShared({ invoicing: io.checked }).catch(e => toast(e.message)); vAyarlar(); };
   $("#btc").onclick = () => btConnect(true).then(() => vAyarlar());
+  $("#vehSel").onchange = e => { setLocal("vehicleId", e.target.value); toast("Kaydedildi"); };
+  const ve = $("#vehEd"); if (ve) ve.onclick = () => vehiclesDialog(vAyarlar);
   $("#tp").onclick = () => printLines([{ t: "TEST ÇIKTISI", c: 1, b: 1, big: 1 }, "ÇçĞğİıÖöŞşÜü", lr("Sol", "Sağ", PW()), "1234567890".repeat(5).slice(0, PW()), { t: S().firm || "Seyyar Satış", c: 1 }]);
 }
 
@@ -1153,7 +1188,7 @@ function vYedek() {
    <button class="btn pri block" id="bj" style="margin-top:10px">${ICONS.dl} Tüm verileri indir (JSON)</button>
    <div class="grid2" style="margin-top:8px"><button class="btn" id="bp">Ürünler (Excel)</button><button class="btn" id="bc">Cariler (Excel)</button></div></div>`;
   $("#bj").onclick = () => busy($("#bj"), async () => {
-    const t = ["settings", "accounts", "parties", "products", "documents", "document_lines", "stock_moves", "cash_moves", "ledger", "app_users"]; const out = { exportedAt: new Date().toISOString(), version: APP_VER };
+    const t = ["settings", "accounts", "parties", "products", "documents", "document_lines", "stock_moves", "cash_moves", "ledger", "app_users", "visits", "party_prices", "vehicles", "vehicle_stock", "vehicle_moves"]; const out = { exportedAt: new Date().toISOString(), version: APP_VER };
     for (const x of t) out[x] = await API.getAll(x, "select=*");
     download(`seyyar-yedek-${ymd(new Date())}.json`, JSON.stringify(out), "application/json"); toast("İndirildi");
   });
@@ -1161,7 +1196,210 @@ function vYedek() {
   $("#bc").onclick = () => { go("cari"); setTimeout(() => $("#cexp") && $("#cexp").click(), 50); };
 }
 
-const VIEWS = { satis: () => vDoc({ type: "satis" }), doc: vDoc, stok: vStok, urun: vUrun, sayim: vSayim, toplufiyat: vTopluFiyat, cari: vCari, caridetay: vCariDetay, kasa: vKasa, gunsonu: vGunSonu, rapor: vRapor, menu: vMenu, belgeler: vBelgeler, kuyruk: vKuyruk, ayarlar: vAyarlar, kullanicilar: vKullanicilar, yedek: vYedek };
+/* =================== ARAÇ YARDIMCILARI =================== */
+function vehId() { const id = setting("vehicleId"); return id && (D.vehicles || []).some(v => v.id === id && v.active !== false) ? id : ""; }
+function vehById(id) { return (D.vehicles || []).find(v => v.id === id); }
+function vehQty(vid, pid) { return r2(((D.vstock || {})[vid] || {})[pid] || 0); }
+function depoQty(p) { let s = +p.stock || 0; Object.values(D.vstock || {}).forEach(m => s -= (m[p.id] || 0)); return r2(s); }
+
+/* =================== KONUM & ZİYARET =================== */
+const isCust = c => c.kind !== "tedarikci";
+function km(a, b) { const R = 6371, t = x => x * Math.PI / 180; const dLa = t(b.lat - a.lat), dLo = t(b.lng - a.lng); const h = Math.sin(dLa / 2) ** 2 + Math.cos(t(a.lat)) * Math.cos(t(b.lat)) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); }
+const fkm = d => d < 1 ? Math.round(d * 1000) + " m" : (d < 10 ? d.toFixed(1).replace(".", ",") : Math.round(d)) + " km";
+let lastPos = null;
+function getPos(fresh) {
+  return new Promise((res, rej) => {
+    if (!fresh && lastPos && Date.now() - lastPos.t < 60000) return res(lastPos);
+    if (!navigator.geolocation) return rej(new Error("Bu cihazda konum yok"));
+    navigator.geolocation.getCurrentPosition(p => { lastPos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() }; res(lastPos); },
+      e => rej(new Error(e.code === 1 ? "Konum izni verilmedi. Tarayıcı ayarlarından bu siteye konum izni verin." : "Konum alınamadı, açık alanda tekrar deneyin.")), { enableHighAccuracy: true, timeout: 15000, maximumAge: fresh ? 0 : 60000 });
+  });
+}
+function navUrl(c) { return c.lat ? `https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}` : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent([c.name, c.address, c.district, c.city].filter(Boolean).join(" "))}`; }
+async function saveLocation(c, after) {
+  if (c.lat && !await ask(`${c.name} için kayıtlı konum şu anki yerinizle değiştirilsin mi?`, "Güncelle")) return;
+  toast("Konum alınıyor…");
+  try {
+    const p = await getPos(true);
+    if (p.acc > 150 && !await ask(`Konum hassasiyeti düşük (±${Math.round(p.acc)} m). Yine de kaydedilsin mi?`, "Kaydet")) return;
+    c.lat = p.lat; c.lng = p.lng;
+    await writeNowOrQueue({ kind: "patch", table: "parties", filter: "id=eq." + c.id, body: { lat: p.lat, lng: p.lng }, label: "Konum: " + c.name });
+    saveCache(); toast("Konum kaydedildi ✓"); if (after) after();
+  } catch (e) { toast(e.message); }
+}
+async function saveVisit(c, result, after) {
+  let note = null;
+  if (result === "gidilemedi") { const r = await prompt2("Gidilemedi / kapalı", "Not (isteğe bağlı)", "Kapalıydı"); if (r === null) return; note = r || null; }
+  const row = { id: uuid(), party_id: c.id, date: new Date().toISOString(), result, note };
+  try { await writeNowOrQueue({ kind: "upsert", table: "visits", rows: [row], label: (result === "ziyaret" ? "Ziyaret: " : "Gidilemedi: ") + c.name }); } catch (e) { return toast(e.message); }
+  (D.visits = D.visits || []).unshift(row); if (result === "ziyaret") (D.plast = D.plast || {})[c.id] = row.date;
+  saveCache(); toast(result === "ziyaret" ? "Ziyaret kaydedildi ✓" : "Kaydedildi"); if (after) after();
+}
+function daysSince(id) { const d = (D.plast || {})[id]; return d ? Math.floor((startOfDay(new Date()) - startOfDay(d)) / 864e5) : null; }
+function agoText(id) { const n = daysSince(id); return n === null ? "hiç uğranmadı" : n === 0 ? "bugün" : n === 1 ? "dün" : n + " gün önce"; }
+const overDays = id => { const n = daysSince(id); return n === null || n > (+S().visitDays || 30); };
+function todayStatus(id) {
+  const t0 = startOfDay(new Date());
+  const sale = D.docs.find(d => d.party_id === id && d.type === "satis" && d.status !== "iptal" && new Date(d.date) >= t0);
+  if (sale) return { k: "satis", t: "✓ Satış " + tl(D.docs.filter(d => d.party_id === id && d.type === "satis" && d.status !== "iptal" && new Date(d.date) >= t0).reduce((a, d) => a + d.total, 0)) };
+  const v = (D.visits || []).find(x => x.party_id === id && new Date(x.date) >= t0);
+  const l = (D.plast || {})[id];
+  if (l && new Date(l) >= t0 && (!v || v.result !== "gidilemedi")) return { k: "islem", t: "✓ Uğrandı" };
+  if (v) return v.result === "ziyaret" ? { k: "islem", t: "✓ Uğrandı" } : { k: "yok", t: "✗ " + (v.note || "Gidilemedi") };
+  return null;
+}
+function regions() { return [...new Set(D.parties.filter(c => c.active !== false && isCust(c)).flatMap(c => c.city ? [c.city, ...(c.district ? [c.city + " / " + c.district] : [])] : []))].sort((a, b) => a.localeCompare(b, "tr")); }
+const inRegion = (c, r) => !r || c.city === r || [c.city, c.district].filter(Boolean).join(" / ") === r;
+
+/* --- Müşteriler: Rota görünümü --- */
+let rotaSort = lsGet("ss_rotasort", "oncelik");
+function vRota(head) {
+  const reg = lsGet("ss_rota", ""); const regs = regions();
+  let list = D.parties.filter(c => c.active !== false && isCust(c) && inRegion(c, reg));
+  const st = Object.fromEntries(list.map(c => [c.id, todayStatus(c.id)]));
+  const done = list.filter(c => st[c.id]);
+  const t0 = startOfDay(new Date());
+  const sales = D.docs.filter(d => d.type === "satis" && d.status !== "iptal" && new Date(d.date) >= t0 && list.some(c => c.id === d.party_id));
+  const prio = c => (balance(c.id) > 0.009 ? 1e9 : 0) + (daysSince(c.id) === null ? 1e6 : daysSince(c.id) * 1000) + Math.min(balance(c.id), 999);
+  const draw = (order) => {
+    $("#app").innerHTML = head + `
+    <div class="card">
+      <div class="row"><select id="reg" class="grow"><option value="">${regs.length ? "Bölge seçin (il / ilçe)" : "Önce müşterilere il / ilçe girin"}</option>${regs.map(r => `<option ${r === reg ? "selected" : ""}>${esc(r)}</option>`).join("")}</select></div>
+      ${reg ? `<div class="today" style="margin:10px 0 0;cursor:default"><div><span class="k">Ziyaret</span><b class="num">${done.length} / ${list.length}</b></div><div><span class="k">Satış</span><b class="num">${tl(sum(sales, d => d.total))}</b></div><div><span class="k">Bölge alacağı</span><b class="num">${tl(sum(list, c => Math.max(0, balance(c.id))))}</b></div></div>
+      <div class="row" style="margin-top:10px"><div class="seg grow" id="rs"><button data-rs="oncelik" class="${rotaSort === "oncelik" ? "on" : ""}">Öncelik</button><button data-rs="yol" class="${rotaSort === "yol" ? "on" : ""}">Yakınlık sırası</button></div><button class="btn sm" id="rsum">Gün özeti</button></div>` : ""}
+    </div>
+    ${reg ? `<div class="card list">${order.length ? order.map(({ c, d }) => { const s = st[c.id]; const b = balance(c.id); return `<div class="it click" data-c="${c.id}" ${s ? 'style="opacity:.6"' : ""}>
+       <div class="grow"><div class="t">${esc(c.name)}</div><div class="small muted">${esc(c.district || c.city || "")}${d !== undefined ? " · " + fkm(d) : ""} · <span class="${overDays(c.id) ? "warnc" : ""}">${agoText(c.id)}</span></div>${s ? `<div class="small ${s.k === "yok" ? "danger" : "okc"}">${esc(s.t)}</div>` : ""}</div>
+       <div class="right num"><b class="${b > 0.009 ? "danger" : "muted"}">${b > 0.009 ? tl(b) : "—"}</b>${!c.lat ? '<div class="small muted">konum yok</div>' : ""}</div></div>`; }).join("") : '<div class="empty">Bu bölgede müşteri yok.</div>'}</div>` : ""}`;
+    $("#reg").onchange = e => { lsSet("ss_rota", e.target.value); vCari(); };
+    $$("[data-rs]").forEach(b => b.onclick = () => { rotaSort = b.dataset.rs; lsSet("ss_rotasort", rotaSort); vCari(); });
+    $$("[data-c]").forEach(el => el.onclick = () => go("caridetay", { id: el.dataset.c }));
+    const rsum = $("#rsum"); if (rsum) rsum.onclick = () => routeSummary(reg, list, st, sales);
+    bindCariHead();
+  };
+  const pending = list.filter(c => !st[c.id]), finished = list.filter(c => st[c.id]);
+  if (reg && rotaSort === "yol") {
+    draw(pending.map(c => ({ c })));
+    getPos().then(pos => {
+      const withLoc = pending.filter(c => c.lat), noLoc = pending.filter(c => !c.lat); const out = []; let cur = pos; const left = withLoc.slice();
+      while (left.length) { let bi = 0, bd = 1e9; left.forEach((c, i) => { const d = km(cur, c); if (d < bd) { bd = d; bi = i; } }); const c = left.splice(bi, 1)[0]; out.push({ c, d: bd }); cur = c; }
+      if (R.v === "cari") draw(out.concat(noLoc.map(c => ({ c }))).concat(finished.map(c => ({ c }))));
+    }).catch(e => { toast(e.message); });
+  } else draw(pending.sort((a, b) => prio(b) - prio(a)).concat(finished).map(c => ({ c })));
+}
+function routeSummary(reg, list, st, sales) {
+  const t = `${S().firm || ""} – ${fd(new Date())} ${reg} rota özeti\n` +
+    `Ziyaret: ${list.filter(c => st[c.id] && st[c.id].k !== "yok").length} / ${list.length} · Satış: ${tl(sum(sales, d => d.total))}\n\n` +
+    list.map(c => `${st[c.id] ? (st[c.id].k === "yok" ? "✗" : "✓") : "•"} ${c.name}${st[c.id] ? " – " + st[c.id].t.replace(/^[✓✗] /, "") : " – gidilmedi"}${balance(c.id) > 0.009 ? " (borç " + tl(balance(c.id)) + ")" : ""}`).join("\n");
+  dialog(`<h3>Gün özeti</h3><pre class="rc" style="white-space:pre-wrap;font-size:13px;max-height:50vh;overflow:auto">${esc(t)}</pre><div class="acts"><button class="btn" id="cp">Kopyala</button><a class="btn pri" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(t)}">WhatsApp</a></div>`, d => { d.querySelector("#cp").onclick = () => copyText(t); });
+}
+
+/* --- Müşteriler: Yakınımda görünümü --- */
+function vYakin(head) {
+  const withLoc = D.parties.filter(c => c.active !== false && isCust(c) && c.lat);
+  const noLoc = D.parties.filter(c => c.active !== false && isCust(c) && !c.lat).length;
+  $("#app").innerHTML = head + `<div class="card list" id="yl"><div class="empty"><span class="spin"></span><br>Konumunuz alınıyor…</div></div>
+    ${noLoc ? `<div class="small muted" style="text-align:center;padding:0 10px">${noLoc} müşterinin konumu kayıtlı değil. Marketin önündeyken müşteri sayfasında <b>“Konumu kaydet”</b>e dokunun.</div>` : ""}`;
+  bindCariHead();
+  const tok = renderTok;
+  getPos(true).then(pos => {
+    if (tok !== renderTok) return;
+    const l = withLoc.map(c => ({ c, d: km(pos, c) })).sort((a, b) => a.d - b.d).slice(0, 50);
+    $("#yl").innerHTML = l.length ? l.map(({ c, d }) => { const b = balance(c.id); const s = todayStatus(c.id); return `<div class="it click" data-c="${c.id}"><div class="grow"><div class="t">${esc(c.name)}</div><div class="small muted"><b style="color:var(--ink)">${fkm(d)}</b> · ${esc(c.district || c.city || "")} · <span class="${overDays(c.id) ? "warnc" : ""}">${agoText(c.id)}</span>${s ? ` · <span class="${s.k === "yok" ? "danger" : "okc"}">${esc(s.t)}</span>` : ""}</div></div><div class="right num"><b class="${b > 0.009 ? "danger" : "muted"}">${b > 0.009 ? tl(b) : "—"}</b></div><a class="btn sm" data-nav href="${navUrl(c)}" target="_blank" rel="noopener" style="margin-left:6px">Yol</a></div>`; }).join("")
+      : '<div class="empty">Konumu kayıtlı müşteri yok.</div>';
+    $$("#yl [data-c]").forEach(el => el.onclick = e => { if (e.target.closest("[data-nav]")) return; go("caridetay", { id: el.dataset.c }); });
+  }).catch(e => { if (tok === renderTok) $("#yl").innerHTML = `<div class="empty">${esc(e.message)}<br><br><button class="btn" onclick="vCari()">Tekrar dene</button></div>`; });
+}
+
+/* =================== ARAÇ STOĞU =================== */
+let aracSel = "";
+function vArac() {
+  const vs = (D.vehicles || []).filter(v => v.active !== false);
+  if (!vs.length) {
+    $("#app").innerHTML = `<div class="card"><div class="empty">Henüz araç tanımlı değil.${isAdmin() ? "" : "<br>Yöneticiden araç eklemesini isteyin."}</div>${isAdmin() ? `<button class="btn pri block" id="addv">${ICONS.plus} Araç ekle</button>` : ""}</div>`;
+    const a = $("#addv"); if (a) a.onclick = () => vehiclesDialog(vArac); return;
+  }
+  if (!vs.some(v => v.id === aracSel)) aracSel = vehId() || vs[0].id;
+  const vid = aracSel; const m = (D.vstock || {})[vid] || {};
+  const items = Object.entries(m).filter(([, q]) => Math.abs(q) > 1e-9).map(([pid, q]) => ({ p: prodById(pid), q })).filter(x => x.p).sort((a, b) => a.p.name.localeCompare(b.p.name, "tr"));
+  const t0 = startOfDay(new Date());
+  const sold = D.docs.filter(d => d.vehicle_id === vid && d.type === "satis" && d.status !== "iptal" && new Date(d.date) >= t0);
+  $("#app").innerHTML = `
+  <div class="card">
+    <div class="row">${vs.length > 1 ? `<select id="vsel" class="grow">${vs.map(v => `<option value="${v.id}" ${v.id === vid ? "selected" : ""}>${esc(v.name)}${v.id === vehId() ? " (bu telefon)" : ""}</option>`).join("")}</select>` : `<h2 class="grow" style="margin:0">${esc(vs[0].name)}</h2>`}${isAdmin() ? `<button class="btn iconbtn" id="vmore">⋯</button>` : ""}</div>
+    ${vid !== vehId() ? `<div class="hint" style="margin-top:8px">Bu telefondan yapılan satışlar ${vehId() ? esc((vehById(vehId()) || {}).name) + " aracından" : "hiçbir araçtan"} düşüyor. <a href="#" id="setv" class="lnk">Bu telefonu bu araca bağla</a></div>` : ""}
+    <div class="today" style="margin:10px 0 0;cursor:default"><div><span class="k">Araçta</span><b class="num">${items.filter(x => x.q > 0).length} çeşit</b></div><div><span class="k">Toplam adet</span><b class="num">${qf(r2(sum(items, x => Math.max(0, x.q))))}</b></div><div><span class="k">Satış değeri</span><b class="num">${tl(sum(items, x => Math.max(0, x.q) * (+x.p.retail || 0)))}</b></div><div><span class="k">Bugün satış</span><b class="num">${tl(sum(sold, d => d.total))}</b></div></div>
+    <div class="grid3" style="margin-top:10px"><button class="btn pri" data-am="yukleme">⬆ Yükle</button><button class="btn" data-am="bosaltma">⬇ Boşalt</button><button class="btn" data-am="sayim">Sayım</button></div>
+  </div>
+  <div class="card list">${items.length ? items.map(({ p, q }) => `<div class="it"><div class="grow"><div class="t">${esc(p.name)}</div><div class="small muted">Depoda ${qf(depoQty(p))}${+p.pack_qty > 1 ? ` · koli ${qf(p.pack_qty)}` : ""}</div></div><div class="right num"><b class="${q < 0 ? "danger" : ""}">${qf(q)}</b>${+p.pack_qty > 1 && q >= p.pack_qty ? `<div class="small muted">${qf(Math.floor(q / p.pack_qty))} koli${q % p.pack_qty ? " + " + qf(r2(q % p.pack_qty)) : ""}</div>` : ""}</div></div>`).join("") : '<div class="empty">Araç boş. Sabah “Yükle” ile depodan araca mal yükleyin.</div>'}</div>`;
+  const vsel = $("#vsel"); if (vsel) vsel.onchange = () => { aracSel = vsel.value; vArac(); };
+  const sv = $("#setv"); if (sv) sv.onclick = e => { e.preventDefault(); setLocal("vehicleId", vid); toast("Bu telefon artık bu araçtan satış yapıyor"); vArac(); };
+  const vm = $("#vmore"); if (vm) vm.onclick = () => vehiclesDialog(vArac);
+  $$("[data-am]").forEach(b => b.onclick = () => go("aracis", { vid, mode: b.dataset.am }));
+}
+const AM = { yukleme: "Araca yükle", bosaltma: "Depoya boşalt", sayim: "Araç sayımı" };
+function vAracIs(p) {
+  const { vid, mode } = p; const key = `ss_ai_${mode}_${vid}`; let list = lsGet(key, null);
+  const m = (D.vstock || {})[vid] || {};
+  if (!list) { list = mode === "sayim" ? Object.entries(m).filter(([pid, q]) => q > 0 && prodById(pid)).map(([pid, q]) => ({ id: pid, qty: r2(q) })) : []; }
+  const save = () => lsSet(key, list);
+  $("#ttl").textContent = AM[mode] + " – " + ((vehById(vid) || {}).name || "");
+  const info = pr => mode === "yukleme" ? `Depoda ${qf(depoQty(pr))} · araçta ${qf(vehQty(vid, pr.id))}` : mode === "bosaltma" ? `Araçta ${qf(vehQty(vid, pr.id))}` : (() => { const s = list.find(x => x.id === pr.id); const d = r2((s ? s.qty : 0) - vehQty(vid, pr.id)); return `Olması gereken ${qf(vehQty(vid, pr.id))}${d ? ` · fark <b class="${d < 0 ? "danger" : "okc"}">${d > 0 ? "+" : ""}${qf(d)}</b>` : " · ✓"}`; })();
+  const step = pr => mode !== "sayim" && +pr.pack_qty > 1 && koliPref[pr.id] ? +pr.pack_qty : 1;
+  $("#app").innerHTML = `<div class="card">
+    <div class="small muted" style="margin-bottom:8px">${mode === "yukleme" ? "Depodan araca konan ürünleri okutun veya arayın. Toplam stok değişmez, mal araca geçer." : mode === "bosaltma" ? "Araçtan depoya geri konan ürünleri girin." : "Araçtaki ürünleri sayın, miktarları düzeltin. Kaydedince fark (eksik / fazla) stoğa işlenir."}</div>
+    <div class="row"><div class="searchbox grow"><input id="q" placeholder="Barkod okut / ürün ara" autocomplete="off"><div class="results" id="res" style="display:none"></div></div><button class="btn iconbtn" id="cam">${ICONS.cam}</button></div>
+    ${mode === "bosaltma" && Object.values(m).some(q => q > 0) ? `<button class="btn sm" id="all" style="margin-top:8px">Araçtakilerin hepsi</button>` : ""}
+  </div>
+  <div class="card list">${list.length ? list.map((s, i) => { const pr = prodById(s.id); if (!pr) return ""; const k = step(pr); return `<div class="it"><div class="grow"><div class="t">${esc(pr.name)}</div><div class="small muted">${info(pr)}</div>${k > 1 ? `<div class="small muted">${qf(r2(s.qty / k))} koli</div>` : ""}</div><div class="qty"><button data-dec="${i}">−</button><input inputmode="decimal" data-q="${i}" value="${qf(s.qty)}"><button data-inc="${i}">+</button></div></div>`; }).join("") : '<div class="empty">Liste boş.</div>'}</div>
+  <div class="grid2"><button class="btn bad" id="clr" ${list.length ? "" : "disabled"}>Temizle</button><button class="btn pri" id="ok" ${list.length ? "" : "disabled"}>${mode === "sayim" ? "Sayımı kaydet" : "Kaydet"} (${list.length})</button></div>`;
+  const addP = pr => { const ex = list.find(s => s.id === pr.id); const k = step(pr); if (ex) ex.qty = r2(ex.qty + k); else list.unshift({ id: pr.id, qty: mode === "sayim" ? 1 : k }); save(); vAracIs(p); };
+  const q = $("#q"), res = $("#res");
+  q.oninput = () => { const l = searchProducts(q.value, true); if (!q.value.trim()) { res.style.display = "none"; return; } res.style.display = "block"; res.innerHTML = l.map(pr => `<div class="it" data-pid="${pr.id}"><div class="grow t">${esc(pr.name)}</div><span class="muted small">${mode === "yukleme" ? "depo " + qf(depoQty(pr)) : "araç " + qf(vehQty(vid, pr.id))}</span></div>`).join("") || '<div class="empty">Bulunamadı</div>'; $$("[data-pid]", res).forEach(el => el.onclick = () => addP(prodById(el.dataset.pid))); };
+  q.onkeydown = e => { if (e.key !== "Enter") return; const v = q.value.trim(); const pr = D.products.find(x => x.barcode === v || x.code === v) || (searchProducts(v, true).length === 1 && searchProducts(v, true)[0]); if (pr) addP(pr); else toast("Bulunamadı"); };
+  $("#cam").onclick = () => scanDialog(code => { const pr = D.products.find(x => x.barcode === code); if (pr) addP(pr); else toast("Kayıtsız: " + code); }, true);
+  const all = $("#all"); if (all) all.onclick = () => { list = Object.entries(m).filter(([pid, q]) => q > 0 && prodById(pid)).map(([pid, q]) => ({ id: pid, qty: r2(q) })); save(); vAracIs(p); };
+  $$("[data-inc]").forEach(b => b.onclick = () => { const s = list[b.dataset.inc]; s.qty = r2(s.qty + step(prodById(s.id))); save(); vAracIs(p); });
+  $$("[data-dec]").forEach(b => b.onclick = () => { const s = list[b.dataset.dec]; s.qty = r2(Math.max(0, s.qty - step(prodById(s.id)))); if (!s.qty && mode !== "sayim") list.splice(b.dataset.dec, 1); save(); vAracIs(p); });
+  $$("[data-q]").forEach(i => i.onchange = () => { list[i.dataset.q].qty = Math.max(0, pnum(i.value)); save(); vAracIs(p); });
+  $("#clr").onclick = async () => { if (await ask("Liste temizlensin mi?", "Temizle", true)) { lsSet(key, null); list = []; vAracIs(p); } };
+  $("#ok").onclick = () => busy($("#ok"), async () => {
+    const lines = list.filter(s => mode === "sayim" || s.qty > 0).map(s => ({ product_id: s.id, qty: s.qty }));
+    const vm = (D.vstock = D.vstock || {})[vid] = (D.vstock[vid] || {});
+    if (mode === "sayim") {
+      const diffs = lines.map(l => ({ ...l, d: r2(l.qty - vehQty(vid, l.product_id)) })).filter(l => l.d);
+      if (!diffs.length) { if (!await ask("Sayım araçtaki miktarlarla birebir aynı. Kaydedilsin mi?", "Kaydet")) return; }
+      else if (!await ask(`${diffs.length} üründe fark var`, "Farkları işle", false, diffs.map(l => `${prodById(l.product_id).name}: ${l.d > 0 ? "+" : ""}${qf(l.d)}`).join(" · ") + " — eksikler stoktan düşülür, fazlalar eklenir.")) return;
+      await rpcNowOrQueue("vehicle_count", { p: { id: uuid(), vehicle_id: vid, lines } }, "Araç sayımı");
+      diffs.forEach(l => { vm[l.product_id] = l.qty; const pr = prodById(l.product_id); if (pr) pr.stock = r2(pr.stock + l.d); });
+      lines.forEach(l => vm[l.product_id] = l.qty);
+    } else {
+      if (mode === "bosaltma") { const over = lines.find(l => l.qty > vehQty(vid, l.product_id) + 1e-9); if (over && !await ask(`${prodById(over.product_id).name}: araçta ${qf(vehQty(vid, over.product_id))} görünüyor, ${qf(over.qty)} boşaltılıyor. Devam edilsin mi?`, "Devam")) return; }
+      if (mode === "yukleme") { const over = lines.find(l => l.qty > depoQty(prodById(l.product_id)) + 1e-9); if (over && !await ask(`${prodById(over.product_id).name}: depoda ${qf(depoQty(prodById(over.product_id)))} görünüyor, ${qf(over.qty)} yükleniyor. Devam edilsin mi?`, "Devam")) return; }
+      await rpcNowOrQueue("vehicle_transfer", { p: { id: uuid(), vehicle_id: vid, type: mode, lines } }, AM[mode]);
+      lines.forEach(l => vm[l.product_id] = r2((vm[l.product_id] || 0) + (mode === "yukleme" ? l.qty : -l.qty)));
+    }
+    lsSet(key, null); saveCache(); toast("Kaydedildi ✓"); back();
+  });
+}
+function vehiclesDialog(after) {
+  const draw = (d) => {
+    const vs = D.vehicles || [];
+    d.querySelector("#vl").innerHTML = vs.length ? vs.map(v => `<div class="it"><div class="grow"><div class="t">${esc(v.name)}</div><div class="small muted">${v.active === false ? "pasif" : v.id === vehId() ? "bu telefon" : ""}</div></div><button class="btn sm" data-ren="${v.id}">Adını değiştir</button><button class="btn sm" data-act="${v.id}">${v.active === false ? "Aktif et" : "Pasif"}</button></div>`).join("") : '<div class="empty">Araç yok</div>';
+    $$("[data-ren]", d).forEach(b => b.onclick = async () => { const v = vs.find(x => x.id === b.dataset.ren); const n = await prompt2("Araç adı", "", v.name); if (!n) return; v.name = n.trim(); await up(v); draw(d); });
+    $$("[data-act]", d).forEach(b => b.onclick = async () => { const v = vs.find(x => x.id === b.dataset.act); v.active = v.active === false; await up(v); draw(d); });
+  };
+  const up = async v => { try { await writeNowOrQueue({ kind: "upsert", table: "vehicles", rows: [{ id: v.id, name: v.name, active: v.active !== false, sort: v.sort || 0 }], label: "Araç: " + v.name }); saveCache(); } catch (e) { toast(e.message); } };
+  dialog(`<h3>Araçlar</h3><div class="small muted">Her araç (ya da satış elemanı) için ayrı stok tutulur. Telefonu araca Ayarlar → Araç bölümünden bağlarsınız.</div><div class="list" id="vl" style="margin-top:8px"></div>
+    <div class="row" style="margin-top:8px"><input id="vn" class="grow" placeholder="Örn: 34 ABC 123 / Ahmet"><button class="btn pri" id="va">Ekle</button></div>
+    <div class="acts"><button class="btn" id="vc">Kapat</button></div>`, (d, close) => {
+    draw(d);
+    d.querySelector("#va").onclick = () => busy(d.querySelector("#va"), async () => { const n = d.querySelector("#vn").value.trim(); if (!n) throw new Error("Araç adı girin"); const v = { id: uuid(), name: n, active: true, sort: (D.vehicles || []).length }; (D.vehicles = D.vehicles || []).push(v); await up(v); if (!vehId()) setLocal("vehicleId", v.id); d.querySelector("#vn").value = ""; draw(d); });
+    d.querySelector("#vc").onclick = () => { close(); if (after) after(); };
+  });
+}
+
+const VIEWS = { satis: () => vDoc({ type: "satis" }), doc: vDoc, stok: vStok, urun: vUrun, sayim: vSayim, toplufiyat: vTopluFiyat, cari: vCari, caridetay: vCariDetay, kasa: vKasa, gunsonu: vGunSonu, rapor: vRapor, menu: vMenu, belgeler: vBelgeler, arac: vArac, aracis: vAracIs, kuyruk: vKuyruk, ayarlar: vAyarlar, kullanicilar: vKullanicilar, yedek: vYedek };
 
 /* =================== BAŞLAT =================== */
 (async function init() {
