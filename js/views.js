@@ -918,6 +918,7 @@ function vAyarlar() {
   const f = (k, l, ph = "", im = "") => `<div><label>${l}</label><input data-k="${k}" value="${esc(s[k] ?? "")}" placeholder="${esc(ph)}" ${im ? `inputmode="${im}"` : ""} ${adm ? "" : "disabled"}></div>`;
   const loc = k => setting(k);
   $("#app").innerHTML = `
+  <div class="card"><h2>Görünüm</h2><div class="seg" id="thSeg">${Object.entries(THEMES).map(([k, t]) => `<button data-th="${k}" class="${getTheme() === k ? "on" : ""}">${t}</button>`).join("")}</div><div class="small muted" style="margin-top:6px">Otomatik: telefonun ayarına göre açık/koyu.</div></div>
   <div class="card"><h2>Yazıcı <span class="small muted">(bu cihaz)</span></h2>
     <label>Bağlantı yöntemi</label><select data-l="printMode"><option value="bt" ${loc("printMode") === "bt" ? "selected" : ""}>Bluetooth (doğrudan, Android Chrome)</option><option value="rawbt" ${loc("printMode") === "rawbt" ? "selected" : ""}>RawBT uygulaması (Android)</option><option value="system" ${loc("printMode") === "system" ? "selected" : ""}>Sistem yazdırma (iPhone/iPad, Wi-Fi yazıcı, PDF)</option></select>
     <div class="grid2">
@@ -952,6 +953,7 @@ function vAyarlar() {
     <label>Ürün kategorileri (virgülle)</label><input data-k="categories" data-list="1" value="${esc((s.categories || []).join(", "))}" ${adm ? "" : "disabled"}>
     <label>Gider türleri (virgülle)</label><input data-k="expenseCats" data-list="1" value="${esc((s.expenseCats || []).join(", "))}" ${adm ? "" : "disabled"}>
   </div>`;
+  $$("#thSeg button").forEach(b => b.onclick = () => { applyTheme(b.dataset.th); $$("#thSeg button").forEach(x => x.classList.toggle("on", x === b)); });
   $$("[data-l]").forEach(el => el.onchange = () => { const k = el.dataset.l; let v = el.type === "checkbox" ? el.checked : el.value; if (["codepage", "copies"].includes(k)) v = pnum(v); setLocal(k, v); updPrnPill(); toast("Kaydedildi"); });
   const saveShared = debounce(async () => { try { await writeNowOrQueue({ kind: "upsert", table: "settings", rows: [{ id: 1, data: D.settings }], label: "Ayarlar" }); toast("Kaydedildi"); } catch (e) { toast(e.message); } }, 400);
   $$("[data-k]").forEach(el => el.onchange = () => { const k = el.dataset.k; let v = el.value; if (el.dataset.bool) v = v === "1"; if (el.dataset.list) v = v.split(",").map(x => x.trim()).filter(Boolean); if (k === "vkn") v = v.replace(/\D/g, ""); D.settings = { ...S(), [k]: v }; saveCache(); saveShared(); });
@@ -984,7 +986,7 @@ const VIEWS = { satis: () => vDoc({ type: "satis" }), doc: vDoc, stok: vStok, ur
 
 /* =================== BAŞLAT =================== */
 (async function init() {
-  $("#backBtn").onclick = back;
+  $("#backBtn").onclick = back; $("#themeBtn").onclick = cycleTheme; applyTheme(getTheme());
   if (!API.sess) return vLogin();
   if (D.loadedAt && D.role) { render(); }
   else $("#app").innerHTML = '<div class="empty" style="margin-top:30vh"><span class="spin"></span><br>Yükleniyor…</div>';

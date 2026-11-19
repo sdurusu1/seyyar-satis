@@ -2,7 +2,23 @@
 /* =================== AYAR =================== */
 const SUPA_URL = "https://kzwmlhncpxylqvveohsb.supabase.co";
 const SUPA_KEY = "sb_publishable_mTWX0XH4IS7hbr4ZhUA0xg_rQez37iM";
-const APP_VER = "2.0";
+const APP_VER = "2.1";
+/* =================== TEMA =================== */
+const THEMES = { auto: "Otomatik", light: "Açık", dark: "Koyu" };
+const THEME_ICON = {
+  auto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>',
+  light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  dark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>'
+};
+function getTheme() { try { return localStorage.getItem("ss_theme") || "auto"; } catch (e) { return "auto"; } }
+function applyTheme(t) {
+  try { localStorage.setItem("ss_theme", t); } catch (e) { }
+  if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  const dark = t === "dark" || (t === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+  const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = dark ? "#121513" : "#0f766e";
+  const b = document.getElementById("themeBtn"); if (b) { b.innerHTML = THEME_ICON[t]; b.title = "Tema: " + THEMES[t]; }
+}
+function cycleTheme() { const o = ["auto", "light", "dark"]; const n = o[(o.indexOf(getTheme()) + 1) % 3]; applyTheme(n); toast("Tema: " + THEMES[n]); }
 
 /* =================== YARDIMCILAR =================== */
 const $ = (s, r = document) => r.querySelector(s);
