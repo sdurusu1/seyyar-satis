@@ -9,8 +9,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>Seyyar Satış</title>
 <script>try{var t=localStorage.getItem("ss_theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;if(JSON.parse(localStorage.getItem("ss_font"))==="big")document.documentElement.classList.add("big");}catch(e){}</script>
 <style>
@@ -233,7 +233,7 @@ body.haspay .toast{bottom:calc(178px + env(safe-area-inset-bottom))}
 .star.on{color:var(--acc)}
 .steps .on{background:var(--ink);color:var(--card)}
 :focus-visible{outline:2.5px solid var(--pri);outline-offset:2px}
-.login .logo{background:#16182b}
+.login .logo{background:none;width:68px;height:68px;padding:0}.login .logo img{width:68px;height:68px;display:block;border-radius:16px;box-shadow:0 10px 24px -10px rgba(234,88,12,.6)}
 :root[data-theme=dark] .today{background:var(--pri-soft);color:var(--ink)}:root[data-theme=dark] .today .k{color:var(--muted)}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]) .today{background:var(--pri-soft);color:var(--ink)}:root:not([data-theme=light]) .today .k{color:var(--muted)}}
 body.deep header h1{font-size:22px;letter-spacing:-.025em}body.deep header{align-items:center}
@@ -257,8 +257,8 @@ body.deep header h1{font-size:22px;letter-spacing:-.025em}body.deep header{align
 <main id="app"></main>
 <nav id="nav"></nav>
 <div id="printArea"></div>
-<script>if (/[?&]demo=1/.test(location.search)) { window.DEMO = true; document.write('<script src="js/demo.js?v=3.0"><\/script>'); }</script>
-<script src="js/core.js?v=3.0"></script>
-<script src="js/views.js?v=3.0"></script>
+<script>if (/[?&]demo=1/.test(location.search)) { window.DEMO = true; document.write('<script src="js/demo.js?v=3.1"><\/script>'); }</script>
+<script src="js/core.js?v=3.1"></script>
+<script src="js/views.js?v=3.1"></script>
 </body>
 </html>

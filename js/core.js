@@ -2,9 +2,11 @@
 /* =================== AYAR =================== */
 const SUPA_URL = "https://kzwmlhncpxylqvveohsb.supabase.co";
 const SUPA_KEY = "sb_publishable_mTWX0XH4IS7hbr4ZhUA0xg_rQez37iM";
-const APP_VER = "3.0";
+const APP_VER = "3.1";
 const DEMO = !!window.DEMO; // örnek verili vitrin: ayrı depolama, sunucuya hiçbir şey gitmez
 const LSP = DEMO ? "demo_" : "";
+const APP_HOME = () => location.origin + location.pathname.replace(/index\.html$/, "");
+const BUY_URL = () => { const u = new URL(D.buyUrl || "https://www.durusular.com/satin-al/seyyar-satis"); if (API.email) u.searchParams.set("email", API.email); if (D.tenant) u.searchParams.set("firma", D.tenant.name); return u.toString(); };
 /* =================== TEMA =================== */
 const THEMES = { auto: "Otomatik", light: "Açık", dark: "Koyu" };
 const THEME_ICON = {
@@ -57,8 +59,16 @@ const API = {
   },
   setFromToken(j) { this.saveSess({ access: j.access_token, refresh: j.refresh_token, exp: Date.now() + (j.expires_in || 3600) * 1000, email: (j.user && j.user.email) || this.email }); },
   async login(email, password) { const j = await this.authCall("token?grant_type=password", { email, password }); this.setFromToken(j); return j; },
-  async signup(email, password) { return this.authCall("signup", { email, password }); },
-  async recover(email) { return this.authCall("recover", { email }); },
+  async signup(email, password) { return this.authCall("signup?redirect_to=" + encodeURIComponent(APP_HOME()), { email, password }); },
+  async recover(email) { return this.authCall("recover?redirect_to=" + encodeURIComponent(APP_HOME()), { email }); },
+  async setPassword(password) { const r = await fetch(SUPA_URL + "/auth/v1/user", { method: "PUT", headers: { apikey: SUPA_KEY, Authorization: "Bearer " + await this.token(), "Content-Type": "application/json" }, body: JSON.stringify({ password }) }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(authMsg(j.msg || j.message || j.error_description || ("Hata " + r.status))); return j; },
+  // E-posta doğrulama / şifre sıfırlama bağlantısından dönüşte adresteki oturumu al
+  consumeHash() {
+    const h = new URLSearchParams(location.hash.replace(/^#/, "")); if (!h.get("access_token")) { if (h.get("error_description")) toast(authMsg(h.get("error_description"))); if (location.hash) history.replaceState(null, "", location.pathname + location.search); return null; }
+    let email = null; try { email = JSON.parse(atob(h.get("access_token").split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).email; } catch (e) { }
+    this.saveSess({ access: h.get("access_token"), refresh: h.get("refresh_token"), exp: Date.now() + (+h.get("expires_in") || 3600) * 1000, email });
+    history.replaceState(null, "", location.pathname + location.search); return h.get("type") || "login";
+  },
   async refresh() {
     if (!this.sess || !this.sess.refresh) throw new Error("Oturum yok");
     const j = await this.authCall("token?grant_type=refresh_token", { refresh_token: this.sess.refresh });
@@ -172,7 +182,7 @@ let online = navigator.onLine;
 async function loadAll(silent) {
   try {
     const me = await API.rpc("my_tenant", {});
-    D.me = me; D.role = me.role; D.vendor = !!me.vendor; D.contact = me.contact || ""; D.brand = me.brand || "Seyyar Satış";
+    D.me = me; D.role = me.role; D.vendor = !!me.vendor; D.contact = me.contact || ""; D.brand = me.brand || "Seyyar Satış"; D.buyUrl = me.buy_url || "https://www.durusular.com/satin-al/seyyar-satis";
     if (!me.role) { D.loadedAt = null; D.tenant = null; saveCache(); return "noaccess"; }
     if (D.tenant && me.tenant && D.tenant.id !== me.tenant.id) { D.docs = []; D.pprice = {}; }
     D.tenant = me.tenant; D.writable = me.writable;

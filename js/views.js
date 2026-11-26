@@ -40,7 +40,7 @@ const invoicing = () => !!S().invoicing && hasMod("efatura");
 function vLogin() {
   document.body.classList.add("auth");
   $("#app").innerHTML = `<div class="login">
-    <div class="logo">${ICONS.satis}</div>
+    <div class="logo"><img src="logo.svg" alt=""></div>
     <h1>Seyyar Satış</h1><div class="muted small" style="margin-bottom:16px">Toptan satış, tahsilat ve rota</div>
     <div class="seg" id="lm"><button data-m="in" class="on">Giriş yap</button><button data-m="up">Kayıt ol</button></div>
     <label>E-posta</label><input id="le" type="email" inputmode="email" autocomplete="username" value="${esc(lsGet("ss_lastEmail", ""))}">
@@ -49,6 +49,7 @@ function vLogin() {
     <button class="btn block" id="lf" style="margin-top:8px;border:0;background:none;color:var(--muted)">Şifremi unuttum</button>
     <div class="hint" id="lh">Yeni misiniz? <b>Kayıt ol</b> deyip e-postanızı doğrulayın, ardından firmanızı açın. Çalışanlar, yöneticinin Daha → Kullanıcılar'dan eklediği e-postayla kayıt olur.</div>
     <a class="btn block" href="?demo=1" style="margin-top:12px">Örnek verilerle dene</a>
+    <div class="small muted" style="text-align:center;margin-top:14px">Seyyar Satış bir <a style="color:inherit;font-weight:600" href="https://www.durusular.com/uygulama/seyyar-satis" target="_blank" rel="noopener">Durusular</a> ürünüdür</div>
   </div>`;
   let mode = "in";
   $$("#lm button").forEach(b => b.onclick = () => { mode = b.dataset.m; $$("#lm button").forEach(x => x.classList.toggle("on", x === b)); $("#lb").textContent = mode === "in" ? "Giriş yap" : "Kayıt ol"; $("#lp").autocomplete = mode === "in" ? "current-password" : "new-password"; });
@@ -1014,6 +1015,7 @@ function vMenu() {
     ${item("alis_iade", "Tedarikçiye iade", "")}
    </div>` : ""}
    <div class="card list">
+    ${isAdmin() && T() && T().status !== "active" || (isAdmin() && daysLeft() !== null && daysLeft() <= 30) ? `<a class="it click" href="${esc(BUY_URL())}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><div class="grow"><div class="t">${T().status === "demo" ? "Lisans satın al" : "Lisansı yenile"}</div><div class="small muted">Yıllık lisans · durusular.com</div></div><span class="muted">›</span></a>` : ""}
     ${item("ayarlar", "Ayarlar", "Görünüm, yazıcı, firma bilgileri")}
     ${!simple && isAdmin() ? item("kullanicilar", "Kullanıcılar", "Personel ekle / yetki") : ""}
     ${!simple && isAdmin() ? item("aktar", "Eski programdan veri aktar", "Excel / CSV ile ürün ve cari") : ""}
@@ -1202,9 +1204,9 @@ function applyChrome() {
   } else if (wm) wm.remove();
   let rb = $("#ribbon"); const dl = daysLeft(); let msg = "";
   if (DEMO) msg = `Örnek verili tanıtım · değişiklikler kaydedilmez · <a href="./" class="lnk">Çıkış</a>`;
-  else if (D.writable === false) msg = `Kullanım süresi doldu · yalnızca görüntüleme${D.contact ? " · Satıcı: " + esc(D.contact) : ""}`;
-  else if (T() && T().status === "demo") msg = `Deneme sürümü · ${dl !== null ? (dl > 0 ? dl + " gün kaldı" : "son gün") : ""}${D.contact ? " · Satın almak için: " + esc(D.contact) : ""}`;
-  else if (T() && dl !== null && dl <= 7) msg = `Lisans ${dl > 0 ? dl + " gün içinde" : "bugün"} bitiyor${D.contact ? " · " + esc(D.contact) : ""}`;
+  else if (D.writable === false) msg = `Kullanım süresi doldu · yalnızca görüntüleme · <a href="${esc(BUY_URL())}" target="_blank" rel="noopener" class="lnk">Lisansı yenile</a>`;
+  else if (T() && T().status === "demo") msg = `Deneme sürümü · ${dl !== null ? (dl > 0 ? dl + " gün kaldı" : "son gün") : ""} · <a href="${esc(BUY_URL())}" target="_blank" rel="noopener" class="lnk">Lisans satın al</a>`;
+  else if (T() && dl !== null && dl <= 7) msg = `Lisans ${dl > 0 ? dl + " gün içinde" : "bugün"} bitiyor · <a href="${esc(BUY_URL())}" target="_blank" rel="noopener" class="lnk">Yenile</a>`;
   if (msg && API.sess && !document.body.classList.contains("auth")) {
     if (!rb) { rb = document.createElement("div"); rb.id = "ribbon"; document.querySelector("header").after(rb); }
     rb.innerHTML = msg; rb.className = D.writable === false ? "bad" : "";
@@ -1215,11 +1217,11 @@ function vNoAccess() {
   document.body.classList.add("auth"); applyChrome();
   const me = D.me || {};
   $("#app").innerHTML = `<div class="login">
-    <div class="logo">${ICONS.satis}</div>
+    <div class="logo"><img src="logo.svg" alt=""></div>
     <h1>Hoş geldiniz</h1>
     <p class="muted">${esc(API.email || "")} hesabı henüz bir firmaya bağlı değil.</p>
     ${me.allow_self_trial || me.vendor ? `<div class="card" style="margin-top:12px">
-      <h3>Yeni firma aç</h3><div class="small muted">${me.trial_days || 14} gün ücretsiz, tüm özellikler açık. Deneme boyunca ekranlarda ve fişlerde “ÖRNEKTİR” yazar.</div>
+      <h3>Yeni firma aç</h3><div class="small muted">${me.trial_days || 7} gün ücretsiz, kart bilgisi istenmez. Deneme boyunca ekranlarda ve fişlerde “ÖRNEKTİR” yazar.</div>
       <label>Firma adı</label><input id="tf" placeholder="Örn: Yıldız Gıda Toptan">
       <label>Telefon</label><input id="tp" inputmode="tel">
       <button class="btn pri block" id="ts" style="margin-top:12px">Denemeyi başlat</button>
@@ -1256,7 +1258,7 @@ function vFirmalar() {
   reload();
 }
 function tenantDialog(x, after) {
-  const isNew = !x; x = x || { status: "demo", modules: MODS.map(m => m[0]), max_users: 3, demo_until: new Date(Date.now() + 14 * 864e5).toISOString() };
+  const isNew = !x; x = x || { status: "demo", modules: MODS.map(m => m[0]), max_users: 3, demo_until: new Date(Date.now() + 7 * 864e5).toISOString() };
   const dv = v => v ? ymd(v) : "";
   dialog(`<h3>${isNew ? "Yeni müşteri firma" : esc(x.name)}</h3>
     <label>Firma adı</label><input id="n" value="${esc(x.name || "")}">
@@ -1282,13 +1284,22 @@ function tenantDialog(x, after) {
   });
 }
 function vendorCfgDialog(cfg, after) {
+  const tm = cfg.trial_modules || MODS.map(m => m[0]);
   dialog(`<h3>Satıcı ayarları</h3>
     <label>Uygulama adı</label><input id="b" value="${esc(cfg.brand || "Seyyar Satış")}">
     <label>İletişim (müşterilere görünür)</label><input id="c" value="${esc(cfg.contact || "")}" placeholder="Örn: 0532 000 00 00 – Ahmet">
-    <label class="chk"><input type="checkbox" id="a" ${cfg.allow_self_trial !== false ? "checked" : ""}> Yeni kişiler kendi deneme firmasını açabilsin</label>
-    <label>Deneme süresi (gün)</label><input id="g" inputmode="numeric" value="${esc(cfg.trial_days || 14)}">
+    <label>Satın alma sayfası</label><input id="u" value="${esc(cfg.buy_url || "")}" placeholder="https://www.durusular.com/satin-al/seyyar-satis">
+    <h3 style="margin-top:16px">Yeni denemeler</h3>
+    <label class="chk"><input type="checkbox" id="a" ${cfg.allow_self_trial !== false ? "checked" : ""}> Kayıt olan kişi kendi deneme firmasını açabilsin</label>
+    <div class="grid2"><div><label>Deneme süresi (gün)</label><input id="g" inputmode="numeric" value="${esc(cfg.trial_days || 7)}"></div><div><label>Kullanıcı sınırı</label><input id="mu" inputmode="numeric" value="${esc(cfg.trial_max_users || 2)}"></div></div>
+    <label>Denemede açık modüller</label>${MODS.map(([k, t]) => `<label class="chk" style="margin-top:6px"><input type="checkbox" data-tm="${k}" ${tm.includes(k) ? "checked" : ""}> ${t}</label>`).join("")}
+    <div class="small muted" style="margin-top:4px">Yalnızca bundan sonra açılacak denemeleri etkiler. Var olan bir firmayı değiştirmek için listeden o firmaya dokunun.</div>
     <div class="acts"><button class="btn" data-close>Vazgeç</button><button class="btn pri" id="ok">Kaydet</button></div>`, (d, close) => {
-    d.querySelector("#ok").onclick = () => busy(d.querySelector("#ok"), async () => { await API.rpc("vendor_config_save", { p: { brand: d.querySelector("#b").value.trim(), contact: d.querySelector("#c").value.trim(), allow_self_trial: d.querySelector("#a").checked, trial_days: Math.max(1, Math.round(pnum(d.querySelector("#g").value)) || 14) } }); close(); toast("Kaydedildi"); D.contact = d.querySelector("#c").value.trim(); if (after) after(); });
+    const q = s => d.querySelector(s);
+    q("#ok").onclick = () => busy(q("#ok"), async () => {
+      await API.rpc("vendor_config_save", { p: { brand: q("#b").value.trim(), contact: q("#c").value.trim(), buy_url: q("#u").value.trim(), allow_self_trial: q("#a").checked, trial_days: Math.max(1, Math.round(pnum(q("#g").value)) || 7), trial_max_users: Math.max(1, Math.round(pnum(q("#mu").value)) || 2), trial_modules: $$("[data-tm]", d).filter(x => x.checked).map(x => x.dataset.tm) } });
+      close(); toast("Kaydedildi"); D.contact = q("#c").value.trim(); if (after) after();
+    });
   });
 }
 
@@ -1599,9 +1610,22 @@ function vehiclesDialog(after) {
 const VIEWS = { satis: () => vDoc({ type: "satis" }), doc: vDoc, stok: vStok, urun: vUrun, sayim: vSayim, toplufiyat: vTopluFiyat, cari: vCari, caridetay: vCariDetay, kasa: vKasa, gunsonu: vGunSonu, rapor: vRapor, menu: vMenu, belgeler: vBelgeler, firmalar: vFirmalar, aktar: vAktar, arac: vArac, aracis: vAracIs, kuyruk: vKuyruk, ayarlar: vAyarlar, kullanicilar: vKullanicilar, yedek: vYedek };
 
 /* =================== BAŞLAT =================== */
+function newPasswordDialog() {
+  dialog(`<h3>Yeni şifre belirleyin</h3><label>Yeni şifre</label><input id="np" type="password" autocomplete="new-password" placeholder="En az 6 karakter"><label>Tekrar</label><input id="np2" type="password" autocomplete="new-password">
+    <div class="acts"><button class="btn" data-close>Sonra</button><button class="btn pri" id="ok">Şifreyi kaydet</button></div>`, (d, close) => {
+    d.querySelector("#ok").onclick = () => busy(d.querySelector("#ok"), async () => {
+      const a = d.querySelector("#np").value, b = d.querySelector("#np2").value;
+      if (a.length < 6) throw new Error("Şifre en az 6 karakter olmalı"); if (a !== b) throw new Error("Şifreler aynı değil");
+      await API.setPassword(a); close(); toast("Şifreniz değiştirildi ✓");
+    });
+  });
+}
 (async function init() {
   await loadCache();
   $("#backBtn").onclick = back; $("#themeBtn").onclick = cycleTheme; applyTheme(getTheme()); document.documentElement.classList.toggle("big", getFont() === "big");
+  const ht = DEMO ? null : API.consumeHash();
+  if (ht === "recovery") setTimeout(newPasswordDialog, 400);
+  else if (ht === "signup") setTimeout(() => toast("E-postanız doğrulandı ✓"), 400);
   if (!API.sess) return vLogin();
   if (D.loadedAt && D.role) { render(); }
   else $("#app").innerHTML = '<div class="empty" style="margin-top:30vh"><span class="spin"></span><br>Yükleniyor…</div>';
